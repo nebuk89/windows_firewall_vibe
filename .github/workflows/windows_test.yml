@@ -46,7 +46,7 @@ jobs:
           
           # Store results for summary
           "google_before=$googleStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "github_before=$githubStatus" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
+          "github_before=$githubStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
       
       - name:  Resolve DNS for Target Hosts
         id: dns-resolution
@@ -78,8 +78,8 @@ jobs:
           }
           
           # Store results for summary
-          "google_ips=$googleIPList" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
-          "github_ips=$githubIPList" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
+          "google_ips=$googleIPList" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "github_ips=$githubIPList" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
       
       - name: Display Current Firewall Rules
         shell: pwsh
@@ -162,7 +162,7 @@ jobs:
           }
           
           # Store results for summary
-          "google_after=$googleStatus" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
+          "google_after=$googleStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "github_after=$githubStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
       
       - name: Generate Job Summary
@@ -235,7 +235,7 @@ jobs:
           }
           
           # Restore the backed up rules
-          $backupPath = "$env: TEMP\firewall-backup.wfw"
+          $backupPath = "$env:TEMP\firewall-backup.wfw"
           if (Test-Path $backupPath) {
             Write-Host "Restoring original firewall rules..." -ForegroundColor Yellow
             $importResult = netsh advfirewall import "$backupPath" 2>&1
