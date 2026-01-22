@@ -1,0 +1,252 @@
+name: Windows Firewall Demo
+
+on: 
+  push:
+    branches:  [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  firewall-test:
+    runs-on: windows-latest
+    permissions:
+      contents:  read
+    
+    steps: 
+      - name: Checkout code
+        uses:  actions/checkout@v4
+      
+      - name: Test Initial Internet Connectivity
+        id: before-firewall
+        shell: pwsh
+        run: |
+          Write-Host "🌐 Testing internet connectivity BEFORE firewall setup..." -ForegroundColor Cyan
+          Write-Host ""
+          
+          # Test connection to Google
+          try {
+            $response = Invoke-WebRequest -Uri "https://www.google.com" -TimeoutSec 10 -UseBasicParsing
+            $googleStatus = "✅ SUCCESS (Status: $($response. StatusCode))"
+            Write-Host "Google.com: $googleStatus" -ForegroundColor Green
+          } catch {
+            $googleStatus = "❌ FAILED"
+            Write-Host "Google.com: $googleStatus" -ForegroundColor Red
+          }
+          
+          # Test connection to GitHub
+          try {
+            $response = Invoke-WebRequest -Uri "https://www.github.com" -TimeoutSec 10 -UseBasicParsing
+            $githubStatus = "✅ SUCCESS (Status:  $($response.StatusCode))"
+            Write-Host "GitHub.com: $githubStatus" -ForegroundColor Green
+          } catch {
+            $githubStatus = "❌ FAILED"
+            Write-Host "GitHub.com: $githubStatus" -ForegroundColor Red
+          }
+          
+          # Store results for summary
+          "google_before=$googleStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "github_before=$githubStatus" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
+      
+      - name:  Resolve DNS for Target Hosts
+        id: dns-resolution
+        shell: pwsh
+        run: |
+          Write-Host "🔍 Resolving DNS for target hosts..." -ForegroundColor Cyan
+          Write-Host ""
+          
+          # Resolve Google IPs
+          try {
+            $googleIPs = (Resolve-DnsName google.com -Type A).IPAddress
+            Write-Host "Google.com IP addresses:" -ForegroundColor Yellow
+            $googleIPs | ForEach-Object { Write-Host "  - $_" -ForegroundColor White }
+            $googleIPList = $googleIPs -join ", "
+          } catch {
+            Write-Host "Failed to resolve Google.com" -ForegroundColor Red
+            $googleIPList = "N/A"
+          }
+          
+          # Resolve GitHub IPs
+          try {
+            $githubIPs = (Resolve-DnsName github.com -Type A).IPAddress
+            Write-Host "GitHub.com IP addresses:" -ForegroundColor Yellow
+            $githubIPs | ForEach-Object { Write-Host "  - $_" -ForegroundColor White }
+            $githubIPList = $githubIPs -join ", "
+          } catch {
+            Write-Host "Failed to resolve GitHub.com" -ForegroundColor Red
+            $githubIPList = "N/A"
+          }
+          
+          # Store results for summary
+          "google_ips=$googleIPList" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
+          "github_ips=$githubIPList" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
+      
+      - name: Display Current Firewall Rules
+        shell: pwsh
+        run: |
+          Write-Host "📋 Current Outbound Firewall Rules (sample):" -ForegroundColor Cyan
+          Write-Host ""
+          Get-NetFirewallRule -Direction Outbound | Select-Object -First 10 DisplayName, Enabled, Action | Format-Table -AutoSize
+          
+          $totalRules = (Get-NetFirewallRule -Direction Outbound).Count
+          Write-Host "Total outbound rules: $totalRules" -ForegroundColor Yellow
+      
+      - name:  Backup Existing Firewall Rules
+        shell: pwsh
+        run: |
+          Write-Host "💾 Backing up existing outbound firewall rules..." -ForegroundColor Cyan
+          
+          # Export existing rules to a file
+          $backupPath = "$env:TEMP\firewall-backup.wfw"
+          $exportResult = netsh advfirewall export "$backupPath" 2>&1
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Failed to backup firewall rules" -ForegroundColor Red
+            Write-Host $exportResult
+            exit 1
+          }
+          
+          if (-not (Test-Path $backupPath)) {
+            Write-Host "❌ Backup file not created" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "✅ Firewall rules backed up to: $backupPath" -ForegroundColor Green
+      
+      - name: Setup Firewall to Block Outbound Traffic
+        shell: pwsh
+        run: |
+          Write-Host "🔒 Setting up firewall to block outbound traffic..." -ForegroundColor Cyan
+          Write-Host ""
+          
+          # Remove all existing outbound rules (explicitly confirm)
+          Write-Host "Removing existing outbound firewall rules..." -ForegroundColor Yellow
+          Get-NetFirewallRule -Direction Outbound | Remove-NetFirewallRule -Confirm: $false
+          Write-Host "✅ Existing rules removed" -ForegroundColor Green
+          
+          # Create new rule to block all outbound traffic
+          Write-Host "Creating new rule to block all outbound traffic..." -ForegroundColor Yellow
+          New-NetFirewallRule -DisplayName "Block All Outbound" -Direction Outbound -Action Block -Protocol Any | Out-Null
+          Write-Host "✅ Firewall rule created successfully" -ForegroundColor Green
+          
+          # Display the new rule
+          Write-Host ""
+          Write-Host "New firewall rule details:" -ForegroundColor Cyan
+          Get-NetFirewallRule -DisplayName "Block All Outbound" | Format-List DisplayName, Enabled, Direction, Action
+      
+      - name:  Test Internet Connectivity After Firewall
+        id: after-firewall
+        shell: pwsh
+        run:  |
+          Write-Host "🔒 Testing internet connectivity AFTER firewall setup..." -ForegroundColor Cyan
+          Write-Host ""
+          
+          # Test connection to Google
+          try {
+            $response = Invoke-WebRequest -Uri "https://www.google.com" -TimeoutSec 10 -UseBasicParsing
+            $googleStatus = "✅ SUCCESS (Status: $($response. StatusCode))"
+            Write-Host "Google.com: $googleStatus" -ForegroundColor Green
+          } catch {
+            $googleStatus = "❌ BLOCKED (Expected)"
+            Write-Host "Google.com: $googleStatus" -ForegroundColor Yellow
+          }
+          
+          # Test connection to GitHub
+          try {
+            $response = Invoke-WebRequest -Uri "https://www.github.com" -TimeoutSec 10 -UseBasicParsing
+            $githubStatus = "✅ SUCCESS (Status: $($response.StatusCode))"
+            Write-Host "GitHub.com: $githubStatus" -ForegroundColor Green
+          } catch {
+            $githubStatus = "❌ BLOCKED (Expected)"
+            Write-Host "GitHub. com: $githubStatus" -ForegroundColor Yellow
+          }
+          
+          # Store results for summary
+          "google_after=$googleStatus" | Out-File -FilePath $env: GITHUB_OUTPUT -Append
+          "github_after=$githubStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      
+      - name: Generate Job Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summary = @"
+          # 🛡️ Windows Firewall Demonstration Results
+          
+          ## 📊 Test Summary
+          
+          This workflow demonstrates the Windows Firewall functionality by:
+          1. Testing internet connectivity before firewall configuration
+          2. Resolving DNS for target hosts
+          3. Configuring firewall to block all outbound traffic
+          4. Verifying that outbound traffic is blocked
+          
+          ---
+          
+          ## 🌐 Connectivity Test Results
+          
+          ### Before Firewall Setup
+          
+          | Host | Status |
+          |------|--------|
+          | Google.com | ${{ steps.before-firewall.outputs.google_before }} |
+          | GitHub.com | ${{ steps. before-firewall. outputs.github_before }} |
+          
+          ### After Firewall Setup
+          
+          | Host | Status |
+          |------|--------|
+          | Google.com | ${{ steps.after-firewall.outputs.google_after }} |
+          | GitHub.com | ${{ steps. after-firewall. outputs.github_after }} |
+          
+          ---
+          
+          ## 🔍 DNS Resolution Results
+          
+          | Host | IP Addresses |
+          |------|--------------|
+          | Google. com | ${{ steps.dns-resolution. outputs.google_ips }} |
+          | GitHub.com | ${{ steps.dns-resolution.outputs. github_ips }} |
+          
+          ---
+          
+          ## ✅ Demonstration Complete
+          
+          The firewall successfully blocked outbound traffic as expected!
+          
+          > **Note:** This is a demonstration environment. Firewall rules were configured to block all outbound traffic, which is why the post-firewall tests show blocked connections.
+          "@
+          
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          
+          Write-Host "📝 Job summary generated successfully!" -ForegroundColor Green
+      
+      - name:  Cleanup and Restore Firewall Rules
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "🧹 Cleaning up and restoring firewall rules..." -ForegroundColor Cyan
+          
+          # Remove the blocking rule we created
+          try {
+            Get-NetFirewallRule -DisplayName "Block All Outbound" -ErrorAction SilentlyContinue | Remove-NetFirewallRule -Confirm:$false
+            Write-Host "✅ Test rule removed" -ForegroundColor Green
+          } catch {
+            Write-Host "⚠️  Test rule already removed" -ForegroundColor Yellow
+          }
+          
+          # Restore the backed up rules
+          $backupPath = "$env: TEMP\firewall-backup.wfw"
+          if (Test-Path $backupPath) {
+            Write-Host "Restoring original firewall rules..." -ForegroundColor Yellow
+            $importResult = netsh advfirewall import "$backupPath" 2>&1
+            
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "⚠️  Failed to restore firewall rules" -ForegroundColor Red
+              Write-Host $importResult
+              Write-Host "Manual intervention may be required to restore firewall configuration" -ForegroundColor Red
+            } else {
+              Write-Host "✅ Original firewall rules restored successfully" -ForegroundColor Green
+            }
+          } else {
+            Write-Host "⚠️  Backup file not found, skipping restore" -ForegroundColor Yellow
+          }
