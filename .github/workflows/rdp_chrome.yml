@@ -86,6 +86,13 @@ jobs:
             exit 1
           }
 
+          # Validate that authCommand looks like a Chrome Remote Desktop command
+          if ($authCommand -notmatch 'DISPLAY=.*chrome-remote-desktop.*--start') {
+            Write-Host "❌ Error: The provided command doesn't appear to be a valid Chrome Remote Desktop command" -ForegroundColor Red
+            Write-Host "Please copy the complete PowerShell command from https://remotedesktop.google.com/headless" -ForegroundColor Yellow
+            exit 1
+          }
+
           # Execute the auth command with the PIN
           try {
             $fullCommand = "$authCommand -pin=$pin"

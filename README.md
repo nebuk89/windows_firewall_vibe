@@ -16,7 +16,7 @@ This repository contains several GitHub Actions workflows:
 
 ### Option 1: Chrome Remote Desktop (Easiest - Recommended)
 
-The `rdp_chrome.yml` workflow uses Google's Chrome Remote Desktop for browser-based access with **no additional software or accounts required beyond a Google account**.
+The `rdp_chrome.yml` workflow uses Google's Chrome Remote Desktop for browser-based access. **Only a Google account is needed** - no additional client software or tunnel services required.
 
 #### Prerequisites
 1. A Google account

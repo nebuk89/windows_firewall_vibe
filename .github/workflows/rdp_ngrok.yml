@@ -83,14 +83,15 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "👤 Configuring RDP user..." -ForegroundColor Cyan
-          
+
           # Set password for the existing runneradmin user
-          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "${{ secrets.PASSWORD }}" -Force)
-          
+          $securePassword = ConvertTo-SecureString -AsPlainText "${{ secrets.PASSWORD }}" -Force
+          Set-LocalUser -Name "runneradmin" -Password $securePassword
+
           Write-Host "✅ User configured successfully" -ForegroundColor Green
           Write-Host ""
           Write-Host "Username: runneradmin" -ForegroundColor White
-          Write-Host "Password: (from secrets.PASSWORD)" -ForegroundColor White
+          Write-Host "Password: (configured from secrets)" -ForegroundColor White
       
       - name: Start ngrok Tunnel
         shell: pwsh
