@@ -58,18 +58,36 @@ jobs:
           Remove-Item $installerPath
           Write-Host "✅ Installation complete" -ForegroundColor Green
 
-      - name: Download Google Chrome
+      - name: Install Google Chrome
         shell: pwsh
         run: |
-          Write-Host "📥 Downloading Google Chrome..." -ForegroundColor Cyan
-          $installerPath = "$env:TEMP\chrome_installer.exe"
-          Invoke-WebRequest 'https://dl.google.com/chrome/install/latest/chrome_installer.exe' -OutFile $installerPath
-          Write-Host "✅ Download complete" -ForegroundColor Green
+          # Check if Chrome is already installed
+          $chromePaths = @(
+            "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe",
+            "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+            "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+          )
+          
+          $chromeInstalled = $false
+          foreach ($path in $chromePaths) {
+            if (Test-Path $path) {
+              Write-Host "✅ Google Chrome is already installed at: $path" -ForegroundColor Green
+              $chromeInstalled = $true
+              break
+            }
+          }
+          
+          if (-not $chromeInstalled) {
+            Write-Host "📥 Downloading Google Chrome..." -ForegroundColor Cyan
+            $installerPath = "$env:TEMP\chrome_installer.exe"
+            Invoke-WebRequest 'https://dl.google.com/chrome/install/latest/chrome_installer.exe' -OutFile $installerPath
+            Write-Host "✅ Download complete" -ForegroundColor Green
 
-          Write-Host "📦 Installing Google Chrome..." -ForegroundColor Cyan
-          Start-Process -FilePath $installerPath -ArgumentList '/install' -Verb RunAs -Wait
-          Remove-Item $installerPath
-          Write-Host "✅ Installation complete" -ForegroundColor Green
+            Write-Host "📦 Installing Google Chrome (silent mode)..." -ForegroundColor Cyan
+            Start-Process -FilePath $installerPath -ArgumentList '/silent /install' -Wait
+            Remove-Item $installerPath
+            Write-Host "✅ Installation complete" -ForegroundColor Green
+          }
 
       - name: Start Chrome Remote Desktop
         shell: pwsh
