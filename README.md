@@ -112,6 +112,6 @@ This is a demonstration of outbound traffic control and is separate from the RDP
 
 ## 📚 Additional Resources
 
-- [Windows Firewall Documentation](https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-firewall/windows-firewall-with-advanced-security)
-- [Remote Desktop Protocol Documentation](https://docs.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/remote-desktop-clients)
+- [Windows Firewall Documentation](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-firewall/windows-firewall-with-advanced-security)
+- [Remote Desktop Protocol Documentation](https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/remote-desktop-clients)
 - [GitHub Actions Network Configuration](https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#networking)
