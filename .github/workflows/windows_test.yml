@@ -1,4 +1,4 @@
-name: Windows Firewall Demo
+name: Windows Firewall Demo v2
 
 on: 
   push:
