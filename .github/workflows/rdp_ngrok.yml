@@ -108,33 +108,40 @@ jobs:
           # Get tunnel information from ngrok API
           try {
             $response = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
-            $publicUrl = $response.tunnels[0].public_url
             
-            if ($publicUrl) {
-              # Extract host and port from tcp://host:port format
-              $connectionInfo = ($publicUrl -replace "tcp://", "")
+            # Check if tunnels exist
+            if ($response.tunnels -and $response.tunnels.Count -gt 0) {
+              $publicUrl = $response.tunnels[0].public_url
               
-              Write-Host ""
-              Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-              Write-Host "    🎉 RDP CONNECTION READY!" -ForegroundColor Green
-              Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-              Write-Host ""
-              Write-Host "🌐 Connection: $connectionInfo" -ForegroundColor Cyan
-              Write-Host "👤 Username: runneradmin" -ForegroundColor Cyan
-              Write-Host "🔑 Password: (your PASSWORD secret)" -ForegroundColor Cyan
-              Write-Host ""
-              Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-              Write-Host ""
-              Write-Host "📝 How to connect:" -ForegroundColor Yellow
-              Write-Host "  1. Open Remote Desktop Connection (mstsc.exe)" -ForegroundColor White
-              Write-Host "  2. Enter: $connectionInfo" -ForegroundColor White
-              Write-Host "  3. Login with username 'runneradmin' and your password" -ForegroundColor White
-              Write-Host ""
-              
-              # Save to environment for job summary
-              "NGROK_URL=$connectionInfo" | Out-File -FilePath $env:GITHUB_ENV -Append
+              if ($publicUrl) {
+                # Extract host and port from tcp://host:port format
+                $connectionInfo = ($publicUrl -replace "tcp://", "")
+                
+                Write-Host ""
+                Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+                Write-Host "    🎉 RDP CONNECTION READY!" -ForegroundColor Green
+                Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+                Write-Host ""
+                Write-Host "🌐 Connection: $connectionInfo" -ForegroundColor Cyan
+                Write-Host "👤 Username: runneradmin" -ForegroundColor Cyan
+                Write-Host "🔑 Password: (your PASSWORD secret)" -ForegroundColor Cyan
+                Write-Host ""
+                Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+                Write-Host ""
+                Write-Host "📝 How to connect:" -ForegroundColor Yellow
+                Write-Host "  1. Open Remote Desktop Connection (mstsc.exe)" -ForegroundColor White
+                Write-Host "  2. Enter: $connectionInfo" -ForegroundColor White
+                Write-Host "  3. Login with username 'runneradmin' and your password" -ForegroundColor White
+                Write-Host ""
+                
+                # Save to environment for job summary
+                "NGROK_URL=$connectionInfo" | Out-File -FilePath $env:GITHUB_ENV -Append
+              } else {
+                Write-Host "❌ Tunnel URL is empty" -ForegroundColor Red
+                exit 1
+              }
             } else {
-              Write-Host "❌ Failed to get tunnel URL" -ForegroundColor Red
+              Write-Host "❌ No tunnels found in ngrok response" -ForegroundColor Red
               exit 1
             }
           } catch {
