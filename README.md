@@ -12,6 +12,16 @@ This repository contains several GitHub Actions workflows:
 4. **RDP via Cloudflare Tunnel** (`rdp_cloudflared.yml`) - ✅ **Working RDP access** using Cloudflare tunnel (best performance)
 5. **RDP Access Setup** (`rdp_access.yml`) - Original demonstration (connections blocked by GitHub network)
 
+## 🍎 Mac Users: All Solutions Work!
+
+All three RDP access methods fully support Mac:
+
+- **Chrome Remote Desktop** (Easiest) - Works in any browser (Safari, Chrome, Firefox). Just go to [remotedesktop.google.com/access](https://remotedesktop.google.com/access)
+- **ngrok** - Use [Microsoft Remote Desktop](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466) from the Mac App Store (free)
+- **Cloudflare Tunnel** - Install cloudflared with `brew install cloudflared`, then use Microsoft Remote Desktop
+
+👉 **Recommended for Mac**: Chrome Remote Desktop (no installation needed) or ngrok (traditional RDP experience)
+
 ## 🎉 Working RDP Access Workflows
 
 ### Option 1: Chrome Remote Desktop (Easiest - Recommended)
@@ -65,7 +75,10 @@ The `rdp_ngrok.yml` workflow uses ngrok to create a reverse tunnel, bypassing Gi
 4. Select your preferred ngrok region (us, eu, ap, au, sa, jp, in)
 5. Wait for the workflow to start (about 30 seconds)
 6. The workflow logs will display connection information like: `tcp://0.tcp.ngrok.io:12345`
-7. Open Remote Desktop Connection (mstsc.exe) and connect to the displayed address
+7. Open your RDP client and connect to the displayed address:
+   - **Windows**: Remote Desktop Connection (mstsc.exe)
+   - **Mac**: Microsoft Remote Desktop (download from [Mac App Store](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466))
+   - **Linux**: Remmina or other RDP client
 8. Login with username `runneradmin` and your PASSWORD secret
 9. When done, cancel the workflow to stop the session
 
@@ -98,7 +111,10 @@ The `rdp_cloudflared.yml` workflow uses Cloudflare Tunnel for better performance
    ```bash
    cloudflared access rdp --hostname <tunnel-url> --url localhost:13389
    ```
-7. Open Remote Desktop Connection (mstsc.exe) and connect to `localhost:13389`
+7. Open your RDP client and connect to `localhost:13389`:
+   - **Windows**: Remote Desktop Connection (mstsc.exe)
+   - **Mac**: Microsoft Remote Desktop (download from [Mac App Store](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466))
+   - **Linux**: Remmina or other RDP client
 8. Login with username `runneradmin` and your PASSWORD secret
 9. When done, cancel the workflow to stop the session
 
@@ -117,7 +133,9 @@ The `rdp_cloudflared.yml` workflow uses Cloudflare Tunnel for better performance
 | Authentication Required | Google account only | Yes (free tier) | No |
 | Client Software | Browser only | RDP client | cloudflared + RDP client |
 | Connection Method | Browser-based | Direct RDP | Local tunnel + RDP |
-| Cross-platform Access | ✅ Yes | Windows/Mac/Linux | Windows/Mac/Linux |
+| **Mac Support** | ✅ **Yes (browser)** | ✅ **Yes (MS Remote Desktop)** | ✅ **Yes (MS Remote Desktop)** |
+| Windows Support | ✅ Yes | ✅ Yes | ✅ Yes |
+| Linux Support | ✅ Yes | ✅ Yes | ✅ Yes |
 | Audio Support | ❌ No | ✅ Yes | ✅ Yes |
 | Best For | Quick GUI access | Traditional RDP users | Extended sessions |
 
