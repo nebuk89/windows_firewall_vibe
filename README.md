@@ -7,13 +7,47 @@ A demonstration repository for Windows Firewall configuration and Remote Desktop
 This repository contains several GitHub Actions workflows:
 
 1. **Windows Firewall Demo** (`windows_test.yml`) - Demonstrates blocking/allowing outbound traffic
-2. **RDP via ngrok** (`rdp_ngrok.yml`) - ✅ **Working RDP access** using ngrok reverse tunnel
-3. **RDP via Cloudflare Tunnel** (`rdp_cloudflared.yml`) - ✅ **Working RDP access** using Cloudflare tunnel (better performance)
-4. **RDP Access Setup** (`rdp_access.yml`) - Original demonstration (connections blocked by GitHub network)
+2. **RDP via Chrome Remote Desktop** (`rdp_chrome.yml`) - ✅ **Working RDP access** using Chrome Remote Desktop (easiest, no account required)
+3. **RDP via ngrok** (`rdp_ngrok.yml`) - ✅ **Working RDP access** using ngrok reverse tunnel
+4. **RDP via Cloudflare Tunnel** (`rdp_cloudflared.yml`) - ✅ **Working RDP access** using Cloudflare tunnel (best performance)
+5. **RDP Access Setup** (`rdp_access.yml`) - Original demonstration (connections blocked by GitHub network)
 
 ## 🎉 Working RDP Access Workflows
 
-### Option 1: RDP via ngrok (Easiest)
+### Option 1: Chrome Remote Desktop (Easiest - Recommended)
+
+The `rdp_chrome.yml` workflow uses Google's Chrome Remote Desktop for browser-based access with **no additional software or accounts required beyond a Google account**.
+
+#### Prerequisites
+1. A Google account
+2. Access to https://remotedesktop.google.com/headless
+
+#### How to Use
+1. Go to [https://remotedesktop.google.com/headless](https://remotedesktop.google.com/headless)
+2. Click **"Begin"** and **"Next"**
+3. Authorize with your Google account
+4. Give your remote computer a name
+5. Copy the entire PowerShell command shown (it will be a long command starting with `&`)
+6. Go to the **Actions** tab in this repository
+7. Select **"RDP via Chrome Remote Desktop"** workflow
+8. Click **"Run workflow"**
+9. Paste the PowerShell command in the **"authcode"** field
+10. Enter a 6-digit PIN in the **"pincode"** field (you'll use this to connect)
+11. Wait for the workflow to complete setup (about 2-3 minutes)
+12. Go to [https://remotedesktop.google.com/access](https://remotedesktop.google.com/access)
+13. Find your computer in the "Remote devices" section and click it
+14. Enter your 6-digit PIN to connect
+15. When done, cancel the workflow to stop the session
+
+**Features:**
+- ✅ **Easiest setup** - Just need a Google account
+- ✅ **No client software** - Works in any web browser
+- ✅ **Cross-platform** - Connect from Windows, Mac, Linux, ChromeOS, or mobile
+- ✅ **Full desktop GUI** - Complete visual access to the Windows desktop
+- ✅ **Very responsive** - Good performance for interactive work
+- ❌ **No audio support** - Chrome Remote Desktop doesn't support audio streaming
+
+### Option 2: RDP via ngrok
 
 The `rdp_ngrok.yml` workflow uses ngrok to create a reverse tunnel, bypassing GitHub's network restrictions and enabling **actual RDP connectivity**.
 
@@ -38,10 +72,11 @@ The `rdp_ngrok.yml` workflow uses ngrok to create a reverse tunnel, bypassing Gi
 **Features:**
 - ✅ Simple setup with just an auth token
 - ✅ Works immediately after workflow starts
-- ✅ No client software needed
+- ✅ **Traditional RDP client** - Use Windows Remote Desktop Connection
 - ✅ Multiple region options for better latency
+- ❌ Requires ngrok account and configuration
 
-### Option 2: RDP via Cloudflare Tunnel (Best Performance)
+### Option 3: RDP via Cloudflare Tunnel (Best Performance)
 
 The `rdp_cloudflared.yml` workflow uses Cloudflare Tunnel for better performance and lower latency.
 
@@ -75,14 +110,16 @@ The `rdp_cloudflared.yml` workflow uses Cloudflare Tunnel for better performance
 
 ## 📋 Comparison
 
-| Feature | ngrok | Cloudflare Tunnel |
-|---------|-------|-------------------|
-| Setup Difficulty | ⭐ Easy | ⭐⭐ Moderate |
-| Performance | Good | Excellent |
-| Authentication Required | Yes (free tier) | No |
-| Client Software | Not needed | Needed (cloudflared) |
-| Connection Method | Direct RDP | Local tunnel + RDP |
-| Best For | Quick access | Extended sessions |
+| Feature | Chrome Remote Desktop | ngrok | Cloudflare Tunnel |
+|---------|----------------------|-------|-------------------|
+| Setup Difficulty | ⭐ Easiest | ⭐⭐ Easy | ⭐⭐⭐ Moderate |
+| Performance | Good | Good | Excellent |
+| Authentication Required | Google account only | Yes (free tier) | No |
+| Client Software | Browser only | RDP client | cloudflared + RDP client |
+| Connection Method | Browser-based | Direct RDP | Local tunnel + RDP |
+| Cross-platform Access | ✅ Yes | Windows/Mac/Linux | Windows/Mac/Linux |
+| Audio Support | ❌ No | ✅ Yes | ✅ Yes |
+| Best For | Quick GUI access | Traditional RDP users | Extended sessions |
 
 ## 🖥️ Original RDP Workflow (Non-Working)
 

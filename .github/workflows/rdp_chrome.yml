@@ -1,0 +1,183 @@
+name: RDP via Chrome Remote Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      authcode:
+        description: 'Chrome Remote Desktop command from https://remotedesktop.google.com/headless (PowerShell command)'
+        required: true
+        type: string
+      pincode:
+        description: 'Six digit PIN for connection'
+        required: true
+        type: string
+
+jobs:
+  rdp-chrome:
+    runs-on: windows-latest
+    timeout-minutes: 360  # 6 hours max
+    permissions:
+      contents: read
+
+    steps:
+      - name: Security Notice
+        shell: pwsh
+        run: |
+          Write-Host "⚠️  SECURITY NOTICE" -ForegroundColor Red
+          Write-Host "This workflow uses Chrome Remote Desktop for access." -ForegroundColor Yellow
+          Write-Host "Make sure you trust the Google account you're using." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "ℹ️  How to get the auth command:" -ForegroundColor Cyan
+          Write-Host "1. Go to https://remotedesktop.google.com/headless" -ForegroundColor White
+          Write-Host "2. Click 'Begin' and 'Next'" -ForegroundColor White
+          Write-Host "3. Authorize and name your computer" -ForegroundColor White
+          Write-Host "4. Copy the PowerShell command shown" -ForegroundColor White
+          Write-Host "5. Paste it as the 'authcode' input when running this workflow" -ForegroundColor White
+          Write-Host ""
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Disable Windows Firewall
+        shell: pwsh
+        run: |
+          Write-Host "🔧 Disabling Windows Firewall for Chrome Remote Desktop..." -ForegroundColor Cyan
+          Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+          Write-Host "✅ Firewall disabled" -ForegroundColor Green
+
+      - name: Download Chrome Remote Desktop Host
+        shell: pwsh
+        run: |
+          Write-Host "📥 Downloading Chrome Remote Desktop Host..." -ForegroundColor Cyan
+          $installerPath = "$env:TEMP\chromeremotedesktophost.msi"
+          Invoke-WebRequest 'https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi' -OutFile $installerPath
+          Write-Host "✅ Download complete" -ForegroundColor Green
+
+          Write-Host "📦 Installing Chrome Remote Desktop Host..." -ForegroundColor Cyan
+          Start-Process msiexec.exe -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait
+          Remove-Item $installerPath
+          Write-Host "✅ Installation complete" -ForegroundColor Green
+
+      - name: Download Google Chrome
+        shell: pwsh
+        run: |
+          Write-Host "📥 Downloading Google Chrome..." -ForegroundColor Cyan
+          $installerPath = "$env:TEMP\chrome_installer.exe"
+          Invoke-WebRequest 'https://dl.google.com/chrome/install/latest/chrome_installer.exe' -OutFile $installerPath
+          Write-Host "✅ Download complete" -ForegroundColor Green
+
+          Write-Host "📦 Installing Google Chrome..." -ForegroundColor Cyan
+          Start-Process -FilePath $installerPath -ArgumentList '/install' -Verb RunAs -Wait
+          Remove-Item $installerPath
+          Write-Host "✅ Installation complete" -ForegroundColor Green
+
+      - name: Start Chrome Remote Desktop
+        shell: pwsh
+        run: |
+          Write-Host "🚀 Starting Chrome Remote Desktop..." -ForegroundColor Cyan
+          Write-Host ""
+
+          $authCommand = "${{ github.event.inputs.authcode }}"
+          $pin = "${{ github.event.inputs.pincode }}"
+
+          # Validate PIN is 6 digits
+          if ($pin -notmatch '^\d{6}$') {
+            Write-Host "❌ Error: PIN must be exactly 6 digits" -ForegroundColor Red
+            exit 1
+          }
+
+          # Execute the auth command with the PIN
+          try {
+            $fullCommand = "$authCommand -pin=$pin"
+            Invoke-Expression $fullCommand
+
+            Write-Host ""
+            Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+            Write-Host "    🎉 CHROME REMOTE DESKTOP READY!" -ForegroundColor Green
+            Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "📝 How to connect:" -ForegroundColor Yellow
+            Write-Host "  1. Go to https://remotedesktop.google.com/access" -ForegroundColor White
+            Write-Host "  2. Find your computer in the 'Remote devices' section" -ForegroundColor White
+            Write-Host "  3. Click on it and enter your 6-digit PIN" -ForegroundColor White
+            Write-Host "  4. You'll be connected to the Windows desktop!" -ForegroundColor White
+            Write-Host ""
+            Write-Host "⚠️  Note: This workflow will stay running for up to 6 hours." -ForegroundColor Yellow
+            Write-Host "Cancel the workflow when you're done to stop the session." -ForegroundColor Yellow
+            Write-Host ""
+
+          } catch {
+            Write-Host "❌ Failed to start Chrome Remote Desktop: $_" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Generate Job Summary
+        shell: pwsh
+        run: |
+          $summary = @"
+          # 🖥️ Chrome Remote Desktop Ready
+
+          ## Connection Information
+
+          Your Windows runner is now accessible via Chrome Remote Desktop!
+
+          ## 🔌 How to Connect
+
+          1. Open [Chrome Remote Desktop](https://remotedesktop.google.com/access)
+          2. Sign in with the same Google account you used to generate the auth command
+          3. Look for your computer in the **Remote devices** section
+          4. Click on it to connect
+          5. Enter your 6-digit PIN when prompted
+          6. Enjoy full desktop access! 🎉
+
+          ## ✅ Features
+
+          - **No additional software needed** - Works directly in your web browser
+          - **Cross-platform** - Access from Windows, Mac, Linux, ChromeOS, or mobile
+          - **Full desktop experience** - Complete GUI access to the Windows runner
+          - **Secure** - Authenticated through your Google account
+          - **No audio support** - Chrome Remote Desktop doesn't support audio streaming
+
+          ## ⏳ Status
+
+          The workflow will keep running until:
+          - You manually cancel it, or
+          - The 6-hour timeout is reached
+
+          When you're done, click "Cancel workflow" to stop the job.
+
+          ## 💡 Tip
+
+          Chrome Remote Desktop provides a smoother experience than traditional RDP for web-based access,
+          making it perfect for quick debugging sessions or GUI testing.
+          "@
+
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+          Write-Host "📝 Job summary generated successfully!" -ForegroundColor Green
+
+      - name: Keep Session Alive
+        shell: pwsh
+        run: |
+          Write-Host "⏳ Keeping session alive..." -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "Chrome Remote Desktop is now active and accessible." -ForegroundColor Green
+          Write-Host "The session will remain open until you cancel or timeout occurs." -ForegroundColor Yellow
+          Write-Host ""
+
+          # Keep the workflow running
+          $elapsed = 0
+          $maxTime = 21600  # 6 hours in seconds
+          $interval = 300   # Update every 5 minutes
+
+          while ($elapsed -lt $maxTime) {
+            $remaining = $maxTime - $elapsed
+            $hours = [math]::Floor($remaining / 3600)
+            $minutes = [math]::Floor(($remaining % 3600) / 60)
+            Write-Host "⏰ Time remaining: $hours hours $minutes minutes" -ForegroundColor Green
+            Start-Sleep -Seconds $interval
+            $elapsed += $interval
+          }
+
+          Write-Host ""
+          Write-Host "✅ Maximum session time reached!" -ForegroundColor Green
