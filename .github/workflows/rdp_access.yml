@@ -1,0 +1,209 @@
+name: RDP Access Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp-setup:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Security Notice
+        shell: pwsh
+        run: |
+          Write-Host "⚠️  SECURITY NOTICE" -ForegroundColor Red
+          Write-Host "This workflow will display RDP credentials in plaintext in the logs." -ForegroundColor Yellow
+          Write-Host "This is intentional for debugging/exploration purposes only." -ForegroundColor Yellow
+          Write-Host "Do NOT use this workflow with sensitive data or production systems." -ForegroundColor Yellow
+          Write-Host ""
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Enable RDP
+        shell: pwsh
+        run: |
+          Write-Host "🔧 Enabling Remote Desktop..." -ForegroundColor Cyan
+          
+          # Enable Remote Desktop
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          
+          # Enable RDP through Windows Firewall
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          Write-Host "✅ Remote Desktop enabled successfully" -ForegroundColor Green
+      
+      - name: Create RDP User
+        shell: pwsh
+        run: |
+          Write-Host "👤 Creating RDP user..." -ForegroundColor Cyan
+          
+          # Generate a random password
+          $password = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 16 | ForEach-Object {[char]$_})
+          $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+          
+          # Create new local user
+          $username = "rdpuser"
+          try {
+            New-LocalUser -Name $username -Password $securePassword -FullName "RDP User" -Description "Temporary RDP access user" -ErrorAction Stop
+            Write-Host "✅ User created: $username" -ForegroundColor Green
+          } catch {
+            Write-Host "⚠️ User might already exist, resetting password..." -ForegroundColor Yellow
+            Set-LocalUser -Name $username -Password $securePassword
+          }
+          
+          # Add user to Remote Desktop Users group
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
+          
+          # Also add to Administrators group for full access (needed for exploration)
+          Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
+          
+          Write-Host ""
+          Write-Host "🔑 RDP Credentials (plaintext for debugging):" -ForegroundColor Yellow
+          Write-Host "===================" -ForegroundColor Yellow
+          Write-Host "Username: $username" -ForegroundColor White
+          Write-Host "Password: $password" -ForegroundColor White
+          Write-Host "===================" -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "⚠️  Note: Credentials are temporary and will be cleaned up after the workflow." -ForegroundColor Yellow
+          Write-Host ""
+          
+          # Save credentials to environment for summary
+          "RDP_USERNAME=$username" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RDP_PASSWORD=$password" | Out-File -FilePath $env:GITHUB_ENV -Append
+      
+      - name: Get Network Information
+        shell: pwsh
+        run: |
+          Write-Host "🌐 Network Information:" -ForegroundColor Cyan
+          Write-Host ""
+          
+          # Get public IP address
+          try {
+            $publicIP = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing).Content
+            Write-Host "Public IP: $publicIP" -ForegroundColor Green
+            "PUBLIC_IP=$publicIP" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } catch {
+            Write-Host "⚠️ Could not retrieve public IP address" -ForegroundColor Yellow
+            "PUBLIC_IP=Unable to retrieve" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+          
+          # Get local IP addresses
+          Write-Host ""
+          Write-Host "Local IP Addresses:" -ForegroundColor Yellow
+          Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -ne '127.0.0.1'} | ForEach-Object {
+            Write-Host "  - $($_.IPAddress) (Interface: $($_.InterfaceAlias))" -ForegroundColor White
+          }
+          
+          # Get hostname
+          $hostname = $env:COMPUTERNAME
+          Write-Host ""
+          Write-Host "Hostname: $hostname" -ForegroundColor Yellow
+          "HOSTNAME=$hostname" | Out-File -FilePath $env:GITHUB_ENV -Append
+          
+          # Display RDP port
+          Write-Host ""
+          Write-Host "RDP Port: 3389 (default)" -ForegroundColor Yellow
+      
+      - name: Display Connection Summary
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "═══════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "    RDP CONNECTION INFORMATION" -ForegroundColor Cyan
+          Write-Host "═══════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "🖥️  Hostname: $env:HOSTNAME" -ForegroundColor White
+          Write-Host "🌐 Public IP: $env:PUBLIC_IP" -ForegroundColor White
+          Write-Host "🔌 RDP Port: 3389" -ForegroundColor White
+          Write-Host ""
+          Write-Host "👤 Username: $env:RDP_USERNAME" -ForegroundColor Yellow
+          Write-Host "🔑 Password: $env:RDP_PASSWORD" -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "═══════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "⏳ The machine will remain available for 5 minutes..." -ForegroundColor Green
+          Write-Host ""
+      
+      - name: Generate Job Summary
+        shell: pwsh
+        run: |
+          $summary = @"
+          # 🖥️ RDP Access Setup Complete
+          
+          ## Connection Information
+          
+          | Parameter | Value |
+          |-----------|-------|
+          | **Hostname** | ``$env:HOSTNAME`` |
+          | **Public IP** | ``$env:PUBLIC_IP`` |
+          | **RDP Port** | ``3389`` |
+          | **Username** | ``$env:RDP_USERNAME`` |
+          | **Password** | ``$env:RDP_PASSWORD`` |
+          
+          ## 🔌 How to Connect
+          
+          1. Open Remote Desktop Connection (mstsc.exe on Windows)
+          2. Enter the public IP address: ``$env:PUBLIC_IP``
+          3. Use the credentials above to log in
+          4. You have **5 minutes** to explore the machine
+          
+          ## ⚠️ Important Notes
+          
+          - **Security**: Credentials are displayed in plaintext for debugging purposes only
+          - The machine is running on GitHub Actions infrastructure
+          - RDP access may be blocked by GitHub's network policies
+          - This is intended for debugging and exploration purposes only
+          - The session will automatically terminate after the wait period
+          - The RDP user has Administrator privileges for full system exploration
+          
+          ## ⏳ Status
+          
+          The workflow is now waiting for 5 minutes before completion...
+          "@
+          
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          
+          Write-Host "📝 Job summary generated successfully!" -ForegroundColor Green
+      
+      - name: Wait for 5 minutes
+        shell: pwsh
+        run: |
+          Write-Host "⏳ Waiting for 5 minutes (300 seconds)..." -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "You can now RDP into the machine using the credentials above." -ForegroundColor Yellow
+          Write-Host ""
+          
+          $waitTime = 300
+          $interval = 30
+          $elapsed = 0
+          
+          while ($elapsed -lt $waitTime) {
+            $remaining = $waitTime - $elapsed
+            $minutes = [math]::Floor($remaining / 60)
+            $seconds = $remaining % 60
+            Write-Host "⏰ Time remaining: $minutes minutes $seconds seconds" -ForegroundColor Green
+            Start-Sleep -Seconds $interval
+            $elapsed += $interval
+          }
+          
+          Write-Host ""
+          Write-Host "✅ Wait period completed!" -ForegroundColor Green
+      
+      - name: Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "🧹 Cleaning up..." -ForegroundColor Cyan
+          
+          # Remove the RDP user
+          try {
+            Remove-LocalUser -Name "rdpuser" -ErrorAction SilentlyContinue
+            Write-Host "✅ RDP user removed" -ForegroundColor Green
+          } catch {
+            Write-Host "⚠️ Could not remove RDP user (may not exist)" -ForegroundColor Yellow
+          }
+          
+          Write-Host "✅ Cleanup complete!" -ForegroundColor Green
