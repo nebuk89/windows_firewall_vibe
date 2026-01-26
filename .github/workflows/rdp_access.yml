@@ -10,6 +10,15 @@ jobs:
       contents: read
     
     steps:
+      - name: Security Notice
+        shell: pwsh
+        run: |
+          Write-Host "⚠️  SECURITY NOTICE" -ForegroundColor Red
+          Write-Host "This workflow will display RDP credentials in plaintext in the logs." -ForegroundColor Yellow
+          Write-Host "This is intentional for debugging/exploration purposes only." -ForegroundColor Yellow
+          Write-Host "Do NOT use this workflow with sensitive data or production systems." -ForegroundColor Yellow
+          Write-Host ""
+      
       - name: Checkout code
         uses: actions/checkout@v4
       
@@ -48,15 +57,17 @@ jobs:
           # Add user to Remote Desktop Users group
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
           
-          # Also add to Administrators group for full access
+          # Also add to Administrators group for full access (needed for exploration)
           Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
           
           Write-Host ""
-          Write-Host "🔑 RDP Credentials:" -ForegroundColor Yellow
+          Write-Host "🔑 RDP Credentials (plaintext for debugging):" -ForegroundColor Yellow
           Write-Host "===================" -ForegroundColor Yellow
           Write-Host "Username: $username" -ForegroundColor White
           Write-Host "Password: $password" -ForegroundColor White
           Write-Host "===================" -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "⚠️  Note: Credentials are temporary and will be cleaned up after the workflow." -ForegroundColor Yellow
           Write-Host ""
           
           # Save credentials to environment for summary
@@ -141,10 +152,12 @@ jobs:
           
           ## ⚠️ Important Notes
           
+          - **Security**: Credentials are displayed in plaintext for debugging purposes only
           - The machine is running on GitHub Actions infrastructure
           - RDP access may be blocked by GitHub's network policies
-          - This is intended for debugging and exploration purposes
+          - This is intended for debugging and exploration purposes only
           - The session will automatically terminate after the wait period
+          - The RDP user has Administrator privileges for full system exploration
           
           ## ⏳ Status
           
