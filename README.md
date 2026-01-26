@@ -1,15 +1,90 @@
 # windows_firewall_vibe
 
-A demonstration repository for Windows Firewall configuration and Remote Desktop Protocol (RDP) setup on GitHub Actions runners.
+A demonstration repository for Windows Firewall configuration and Remote Desktop Protocol (RDP) access to GitHub Actions Windows runners using reverse tunnels.
 
 ## Overview
 
-This repository contains two GitHub Actions workflows:
+This repository contains several GitHub Actions workflows:
 
 1. **Windows Firewall Demo** (`windows_test.yml`) - Demonstrates blocking/allowing outbound traffic
-2. **RDP Access Setup** (`rdp_access.yml`) - Sets up Remote Desktop access to GitHub Actions Windows runners
+2. **RDP via ngrok** (`rdp_ngrok.yml`) - ✅ **Working RDP access** using ngrok reverse tunnel
+3. **RDP via Cloudflare Tunnel** (`rdp_cloudflared.yml`) - ✅ **Working RDP access** using Cloudflare tunnel (better performance)
+4. **RDP Access Setup** (`rdp_access.yml`) - Original demonstration (connections blocked by GitHub network)
 
-## 🖥️ RDP Access Workflow
+## 🎉 Working RDP Access Workflows
+
+### Option 1: RDP via ngrok (Easiest)
+
+The `rdp_ngrok.yml` workflow uses ngrok to create a reverse tunnel, bypassing GitHub's network restrictions and enabling **actual RDP connectivity**.
+
+#### Prerequisites
+1. Create a free ngrok account at [https://dashboard.ngrok.com/signup](https://dashboard.ngrok.com/signup)
+2. Get your auth token from [https://dashboard.ngrok.com/auth](https://dashboard.ngrok.com/auth)
+3. Configure repository secrets:
+   - `NGROK_AUTH_TOKEN` - Your ngrok authentication token
+   - `PASSWORD` - Password for the RDP connection
+
+#### How to Use
+1. Go to the **Actions** tab in this repository
+2. Select **"RDP via ngrok"** workflow
+3. Click **"Run workflow"**
+4. Select your preferred ngrok region (us, eu, ap, au, sa, jp, in)
+5. Wait for the workflow to start (about 30 seconds)
+6. The workflow logs will display connection information like: `tcp://0.tcp.ngrok.io:12345`
+7. Open Remote Desktop Connection (mstsc.exe) and connect to the displayed address
+8. Login with username `runneradmin` and your PASSWORD secret
+9. When done, cancel the workflow to stop the session
+
+**Features:**
+- ✅ Simple setup with just an auth token
+- ✅ Works immediately after workflow starts
+- ✅ No client software needed
+- ✅ Multiple region options for better latency
+
+### Option 2: RDP via Cloudflare Tunnel (Best Performance)
+
+The `rdp_cloudflared.yml` workflow uses Cloudflare Tunnel for better performance and lower latency.
+
+#### Prerequisites
+1. Configure repository secret:
+   - `PASSWORD` - Password for the RDP connection
+2. Download cloudflared on your local machine (one-time setup)
+
+#### How to Use
+1. Go to the **Actions** tab in this repository
+2. Select **"RDP via Cloudflare Tunnel"** workflow
+3. Click **"Run workflow"**
+4. Wait for the workflow to start and display the tunnel URL
+5. On your local machine, download cloudflared:
+   - **Windows**: [Download cloudflared-windows-amd64.exe](https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe)
+   - **macOS**: `brew install cloudflared`
+   - **Linux**: [See releases](https://github.com/cloudflare/cloudflared/releases/latest)
+6. Run the local tunnel command (shown in workflow logs):
+   ```bash
+   cloudflared access rdp --hostname <tunnel-url> --url localhost:13389
+   ```
+7. Open Remote Desktop Connection (mstsc.exe) and connect to `localhost:13389`
+8. Login with username `runneradmin` and your PASSWORD secret
+9. When done, cancel the workflow to stop the session
+
+**Features:**
+- ✅ Better performance and lower latency than ngrok
+- ✅ No account or authentication required
+- ✅ Enterprise-grade Cloudflare infrastructure
+- ✅ More stable connections for longer sessions
+
+## 📋 Comparison
+
+| Feature | ngrok | Cloudflare Tunnel |
+|---------|-------|-------------------|
+| Setup Difficulty | ⭐ Easy | ⭐⭐ Moderate |
+| Performance | Good | Excellent |
+| Authentication Required | Yes (free tier) | No |
+| Client Software | Not needed | Needed (cloudflared) |
+| Connection Method | Direct RDP | Local tunnel + RDP |
+| Best For | Quick access | Extended sessions |
+
+## 🖥️ Original RDP Workflow (Non-Working)
 
 The `rdp_access.yml` workflow is designed to enable RDP access to a GitHub Actions Windows runner for debugging and exploration purposes.
 
@@ -66,29 +141,26 @@ The workflow performs the following steps:
 
 ### 🔧 Alternative Approaches
 
-If you need to interact with a GitHub Actions Windows runner, consider these alternatives:
+If you need other ways to interact with a GitHub Actions Windows runner:
 
-1. **Use a reverse tunnel service** like:
-   - [ngrok](https://ngrok.com/) - Create a tunnel from the runner to your local machine
-   - [CloudFlare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) - Similar tunneling service
-   - [Tailscale](https://tailscale.com/) - Create a private network overlay
-
-2. **Use GitHub Actions debugging features**:
+1. **Use GitHub Actions debugging features**:
    - Add shell commands to inspect the runner state
    - Use `upload-artifact` to save files/logs for inspection
-   - Use `tmate` or similar SSH-based debugging tools
+   - Use `tmate` or similar SSH-based debugging tools (see [action-tmate](https://github.com/mxschmitt/action-tmate))
 
-3. **Run the workflow on a self-hosted runner** where you control the network configuration
+2. **Run the workflow on a self-hosted runner** where you control the network configuration
 
-### 🚀 Running the Workflow
+### 🚀 Running the Original Workflow
 
-To run the RDP Access workflow:
+To run the original (non-working) RDP Access workflow:
 
 1. Navigate to the **Actions** tab in this repository
 2. Select **"RDP Access Setup"** workflow
 3. Click **"Run workflow"** button
 4. The workflow will display connection information in the logs and job summary
-5. Note: Direct connections will fail due to GitHub's network restrictions (see above)
+5. Note: Direct connections will fail due to GitHub's network restrictions
+
+**Important:** This workflow demonstrates the limitations. For actual working RDP access, use the ngrok or Cloudflare Tunnel workflows above.
 
 ### 📝 Security Notice
 

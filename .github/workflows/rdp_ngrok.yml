@@ -1,0 +1,213 @@
+name: RDP via ngrok
+
+on:
+  workflow_dispatch:
+    inputs:
+      ngrok_region:
+        description: 'ngrok region (us, eu, ap, au, sa, jp, in)'
+        required: false
+        default: 'us'
+        type: choice
+        options:
+          - us
+          - eu
+          - ap
+          - au
+          - sa
+          - jp
+          - in
+
+jobs:
+  rdp-ngrok:
+    runs-on: windows-latest
+    timeout-minutes: 360  # 6 hours max
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Security Notice
+        shell: pwsh
+        run: |
+          Write-Host "⚠️  SECURITY NOTICE" -ForegroundColor Red
+          Write-Host "This workflow requires secrets to be configured:" -ForegroundColor Yellow
+          Write-Host "  - NGROK_AUTH_TOKEN: Get from https://dashboard.ngrok.com/auth" -ForegroundColor Yellow
+          Write-Host "  - PASSWORD: RDP password for the runneradmin user" -ForegroundColor Yellow
+          Write-Host "" 
+          Write-Host "RDP credentials will be displayed in workflow logs." -ForegroundColor Yellow
+          Write-Host "Do NOT use this with sensitive data or production systems." -ForegroundColor Yellow
+          Write-Host ""
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download ngrok
+        shell: pwsh
+        run: |
+          Write-Host "📥 Downloading ngrok..." -ForegroundColor Cyan
+          Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+          Write-Host "✅ Download complete" -ForegroundColor Green
+      
+      - name: Extract ngrok
+        shell: pwsh
+        run: |
+          Write-Host "📦 Extracting ngrok..." -ForegroundColor Cyan
+          Expand-Archive ngrok.zip
+          Write-Host "✅ Extraction complete" -ForegroundColor Green
+      
+      - name: Authenticate ngrok
+        shell: pwsh
+        run: |
+          Write-Host "🔑 Authenticating with ngrok..." -ForegroundColor Cyan
+          .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
+          Write-Host "✅ Authentication successful" -ForegroundColor Green
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      
+      - name: Enable Remote Desktop
+        shell: pwsh
+        run: |
+          Write-Host "🔧 Enabling Remote Desktop..." -ForegroundColor Cyan
+          
+          # Enable Remote Desktop
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          
+          # Enable RDP through Windows Firewall
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # Enable Network Level Authentication
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+          
+          Write-Host "✅ Remote Desktop enabled successfully" -ForegroundColor Green
+      
+      - name: Configure RDP User
+        shell: pwsh
+        run: |
+          Write-Host "👤 Configuring RDP user..." -ForegroundColor Cyan
+          
+          # Set password for the existing runneradmin user
+          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "${{ secrets.PASSWORD }}" -Force)
+          
+          Write-Host "✅ User configured successfully" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "Username: runneradmin" -ForegroundColor White
+          Write-Host "Password: (from secrets.PASSWORD)" -ForegroundColor White
+      
+      - name: Start ngrok Tunnel
+        shell: pwsh
+        run: |
+          Write-Host "🚇 Starting ngrok tunnel..." -ForegroundColor Cyan
+          Write-Host "Region: ${{ inputs.ngrok_region }}" -ForegroundColor Yellow
+          
+          # Start ngrok in the background
+          Start-Process -FilePath ".\ngrok\ngrok.exe" -ArgumentList "tcp 3389 --region ${{ inputs.ngrok_region }}"
+          
+          # Wait for ngrok to start
+          Write-Host "Waiting for ngrok to initialize..." -ForegroundColor Yellow
+          Start-Sleep -Seconds 15
+          
+          # Get tunnel information from ngrok API
+          try {
+            $response = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
+            $publicUrl = $response.tunnels[0].public_url
+            
+            if ($publicUrl) {
+              # Extract host and port from tcp://host:port format
+              $connectionInfo = ($publicUrl -replace "tcp://", "")
+              
+              Write-Host ""
+              Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+              Write-Host "    🎉 RDP CONNECTION READY!" -ForegroundColor Green
+              Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+              Write-Host ""
+              Write-Host "🌐 Connection: $connectionInfo" -ForegroundColor Cyan
+              Write-Host "👤 Username: runneradmin" -ForegroundColor Cyan
+              Write-Host "🔑 Password: (your PASSWORD secret)" -ForegroundColor Cyan
+              Write-Host ""
+              Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+              Write-Host ""
+              Write-Host "📝 How to connect:" -ForegroundColor Yellow
+              Write-Host "  1. Open Remote Desktop Connection (mstsc.exe)" -ForegroundColor White
+              Write-Host "  2. Enter: $connectionInfo" -ForegroundColor White
+              Write-Host "  3. Login with username 'runneradmin' and your password" -ForegroundColor White
+              Write-Host ""
+              
+              # Save to environment for job summary
+              "NGROK_URL=$connectionInfo" | Out-File -FilePath $env:GITHUB_ENV -Append
+            } else {
+              Write-Host "❌ Failed to get tunnel URL" -ForegroundColor Red
+              exit 1
+            }
+          } catch {
+            Write-Host "❌ Failed to connect to ngrok API: $_" -ForegroundColor Red
+            exit 1
+          }
+      
+      - name: Generate Job Summary
+        shell: pwsh
+        run: |
+          $summary = @"
+          # 🖥️ RDP Connection Ready via ngrok
+          
+          ## Connection Information
+          
+          | Parameter | Value |
+          |-----------|-------|
+          | **Connection** | ``$env:NGROK_URL`` |
+          | **Username** | ``runneradmin`` |
+          | **Password** | ``(your PASSWORD secret)`` |
+          
+          ## 🔌 How to Connect
+          
+          1. Open **Remote Desktop Connection** (mstsc.exe on Windows)
+          2. Enter the connection address: ``$env:NGROK_URL``
+          3. Use the credentials above to log in
+          4. You have up to **6 hours** before the workflow times out
+          
+          ## ✅ Features
+          
+          - **Reverse tunnel via ngrok** bypasses GitHub network restrictions
+          - **Full RDP access** to the Windows runner
+          - **Works from anywhere** - no direct network access needed
+          - **Secure connection** through ngrok's infrastructure
+          
+          ## ⏳ Status
+          
+          The workflow will keep running until:
+          - You manually cancel it, or
+          - The 6-hour timeout is reached
+          
+          When you're done, click "Cancel workflow" to stop the job.
+          "@
+          
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          
+          Write-Host "📝 Job summary generated successfully!" -ForegroundColor Green
+      
+      - name: Keep Session Alive
+        shell: pwsh
+        run: |
+          Write-Host "⏳ Keeping session alive..." -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "The tunnel is now active and will remain open until:" -ForegroundColor Yellow
+          Write-Host "  - You cancel this workflow, or" -ForegroundColor Yellow
+          Write-Host "  - The 6-hour timeout is reached" -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "You can connect anytime using the information above." -ForegroundColor Green
+          Write-Host ""
+          
+          # Keep the workflow running
+          $elapsed = 0
+          $maxTime = 21600  # 6 hours in seconds
+          $interval = 300   # Update every 5 minutes
+          
+          while ($elapsed -lt $maxTime) {
+            $remaining = $maxTime - $elapsed
+            $hours = [math]::Floor($remaining / 3600)
+            $minutes = [math]::Floor(($remaining % 3600) / 60)
+            Write-Host "⏰ Time remaining: $hours hours $minutes minutes" -ForegroundColor Green
+            Start-Sleep -Seconds $interval
+            $elapsed += $interval
+          }
+          
+          Write-Host ""
+          Write-Host "✅ Maximum session time reached!" -ForegroundColor Green

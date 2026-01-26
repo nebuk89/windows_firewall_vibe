@@ -1,0 +1,211 @@
+name: RDP via Cloudflare Tunnel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp-cloudflared:
+    runs-on: windows-latest
+    timeout-minutes: 360  # 6 hours max
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Security Notice
+        shell: pwsh
+        run: |
+          Write-Host "⚠️  SECURITY NOTICE" -ForegroundColor Red
+          Write-Host "This workflow requires a secret to be configured:" -ForegroundColor Yellow
+          Write-Host "  - PASSWORD: RDP password for the runneradmin user" -ForegroundColor Yellow
+          Write-Host "" 
+          Write-Host "RDP credentials will be displayed in workflow logs." -ForegroundColor Yellow
+          Write-Host "Do NOT use this with sensitive data or production systems." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "ℹ️  This workflow uses Cloudflare Tunnel (cloudflared)" -ForegroundColor Cyan
+          Write-Host "No Cloudflare account or authentication required!" -ForegroundColor Cyan
+          Write-Host ""
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download cloudflared
+        shell: pwsh
+        run: |
+          Write-Host "📥 Downloading cloudflared..." -ForegroundColor Cyan
+          Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile cloudflared.exe
+          Write-Host "✅ Download complete" -ForegroundColor Green
+      
+      - name: Enable Remote Desktop
+        shell: pwsh
+        run: |
+          Write-Host "🔧 Enabling Remote Desktop..." -ForegroundColor Cyan
+          
+          # Enable Remote Desktop
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          
+          # Enable RDP through Windows Firewall
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # Enable Network Level Authentication
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+          
+          Write-Host "✅ Remote Desktop enabled successfully" -ForegroundColor Green
+      
+      - name: Configure RDP User
+        shell: pwsh
+        run: |
+          Write-Host "👤 Configuring RDP user..." -ForegroundColor Cyan
+          
+          # Set password for the existing runneradmin user
+          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "${{ secrets.PASSWORD }}" -Force)
+          
+          Write-Host "✅ User configured successfully" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "Username: runneradmin" -ForegroundColor White
+          Write-Host "Password: (from secrets.PASSWORD)" -ForegroundColor White
+      
+      - name: Start Cloudflare Tunnel
+        shell: pwsh
+        run: |
+          Write-Host "🚇 Starting Cloudflare tunnel..." -ForegroundColor Cyan
+          
+          # Start cloudflared in the background and redirect output to file
+          Start-Process -FilePath ".\cloudflared.exe" -ArgumentList "--url rdp://localhost:3389" -RedirectStandardError "C:\cloudflared.txt"
+          
+          # Wait for tunnel to initialize
+          Write-Host "Waiting for tunnel to initialize..." -ForegroundColor Yellow
+          Start-Sleep -Seconds 10
+          
+          # Extract the tunnel URL from the output
+          $tunnelUrl = ""
+          $urlPattern = 'https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,}'
+          
+          Get-Content C:\cloudflared.txt | ForEach-Object {
+            $match = Select-String -Pattern $urlPattern -InputObject $_
+            if ($match) {
+              $tunnelUrl = $match.Matches.Value
+              if ($tunnelUrl) {
+                # Remove https:// prefix for display
+                $cleanUrl = $tunnelUrl -replace "https://", ""
+                
+                Write-Host ""
+                Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+                Write-Host "    🎉 RDP CONNECTION READY!" -ForegroundColor Green
+                Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+                Write-Host ""
+                Write-Host "🌐 Tunnel URL: $cleanUrl" -ForegroundColor Cyan
+                Write-Host "👤 Username: runneradmin" -ForegroundColor Cyan
+                Write-Host "🔑 Password: (your PASSWORD secret)" -ForegroundColor Cyan
+                Write-Host ""
+                Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+                Write-Host ""
+                Write-Host "📝 How to connect:" -ForegroundColor Yellow
+                Write-Host "  1. Download cloudflared: https://github.com/cloudflare/cloudflared/releases/latest" -ForegroundColor White
+                Write-Host "  2. Run on your local machine:" -ForegroundColor White
+                Write-Host "     cloudflared access rdp --hostname $cleanUrl --url localhost:13389" -ForegroundColor Cyan
+                Write-Host "  3. Open Remote Desktop Connection (mstsc.exe)" -ForegroundColor White
+                Write-Host "  4. Connect to: localhost:13389" -ForegroundColor White
+                Write-Host "  5. Login with username 'runneradmin' and your password" -ForegroundColor White
+                Write-Host ""
+                Write-Host "💡 Note: Port 13389 on localhost is just an example, use any available port" -ForegroundColor Yellow
+                Write-Host ""
+                
+                # Save to environment for job summary
+                "TUNNEL_URL=$cleanUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+                "TUNNEL_FULL_URL=$tunnelUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+              }
+            }
+          }
+          
+          if (-not $tunnelUrl) {
+            Write-Host "❌ Failed to extract tunnel URL" -ForegroundColor Red
+            Write-Host "Cloudflared output:" -ForegroundColor Yellow
+            Get-Content C:\cloudflared.txt
+            exit 1
+          }
+      
+      - name: Generate Job Summary
+        shell: pwsh
+        run: |
+          $summary = @"
+          # 🖥️ RDP Connection Ready via Cloudflare Tunnel
+          
+          ## Connection Information
+          
+          | Parameter | Value |
+          |-----------|-------|
+          | **Tunnel URL** | ``$env:TUNNEL_URL`` |
+          | **Username** | ``runneradmin`` |
+          | **Password** | ``(your PASSWORD secret)`` |
+          
+          ## 🔌 How to Connect
+          
+          ### Step 1: Download cloudflared
+          Download cloudflared for your operating system:
+          - **Windows**: [cloudflared-windows-amd64.exe](https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe)
+          - **macOS**: ``brew install cloudflared``
+          - **Linux**: [See releases](https://github.com/cloudflare/cloudflared/releases/latest)
+          
+          ### Step 2: Create local tunnel
+          Open a terminal/command prompt and run:
+          ``````
+          cloudflared access rdp --hostname $env:TUNNEL_URL --url localhost:13389
+          ``````
+          
+          > 💡 You can use any available local port instead of 13389
+          
+          ### Step 3: Connect via RDP
+          1. Open **Remote Desktop Connection** (mstsc.exe on Windows)
+          2. Connect to: ``localhost:13389`` (or your chosen port)
+          3. Login with:
+             - Username: ``runneradmin``
+             - Password: ``(your PASSWORD secret)``
+          
+          ## ✅ Features
+          
+          - **Cloudflare Tunnel** - Enterprise-grade infrastructure
+          - **Better performance** than ngrok (lower latency)
+          - **No authentication required** - Uses temporary tunnel
+          - **Secure connection** through Cloudflare's network
+          
+          ## ⏳ Status
+          
+          The workflow will keep running until:
+          - You manually cancel it, or
+          - The 6-hour timeout is reached
+          
+          When you're done, click "Cancel workflow" to stop the job.
+          "@
+          
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          
+          Write-Host "📝 Job summary generated successfully!" -ForegroundColor Green
+      
+      - name: Keep Session Alive
+        shell: pwsh
+        run: |
+          Write-Host "⏳ Keeping session alive..." -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "The tunnel is now active and will remain open until:" -ForegroundColor Yellow
+          Write-Host "  - You cancel this workflow, or" -ForegroundColor Yellow
+          Write-Host "  - The 6-hour timeout is reached" -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "You can connect anytime using the instructions above." -ForegroundColor Green
+          Write-Host ""
+          
+          # Keep the workflow running
+          $elapsed = 0
+          $maxTime = 21600  # 6 hours in seconds
+          $interval = 300   # Update every 5 minutes
+          
+          while ($elapsed -lt $maxTime) {
+            $remaining = $maxTime - $elapsed
+            $hours = [math]::Floor($remaining / 3600)
+            $minutes = [math]::Floor(($remaining % 3600) / 60)
+            Write-Host "⏰ Time remaining: $hours hours $minutes minutes" -ForegroundColor Green
+            Start-Sleep -Seconds $interval
+            $elapsed += $interval
+          }
+          
+          Write-Host ""
+          Write-Host "✅ Maximum session time reached!" -ForegroundColor Green
