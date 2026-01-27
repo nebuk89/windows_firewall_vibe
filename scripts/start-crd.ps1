@@ -75,7 +75,7 @@ function Ensure-CrdHost {
       Write-Log "✅ Downloaded CRD host from $url" Green
       break
     } catch {
-      Write-Log "⚠️ Failed to download from $url: $_" Yellow
+      Write-Log "⚠️ Failed to download from $($url): $($_)" Yellow
     }
   }
   if (-not (Test-Path $installer)) { throw "Failed to download Chrome Remote Desktop host MSI" }
@@ -124,7 +124,7 @@ function Tail-Log {
       try {
         Get-Content $log -Tail 50 | ForEach-Object { Write-Host $_ }
       } catch {
-        Write-Log "⚠️ Unable to read $log: $_" Yellow
+        Write-Log "⚠️ Unable to read $($log): $($_)" Yellow
       }
       break
     }
