@@ -20,9 +20,6 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-# Configuration
-$ServiceStartWaitSeconds = 2
-
 function Write-Log {
   param(
     [Parameter(Mandatory = $true)][string]$Message,
@@ -170,7 +167,8 @@ if ($null -ne $svc) {
         Write-Log "⚠️ Service '$svcName' is $($svc.Status) after $($sw.Elapsed.TotalSeconds)s" Yellow
       }
     } catch {
-      $currentStatus = (Get-Service -Name $svcName -ErrorAction SilentlyContinue)?.Status
+      $svcStatus = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+      $currentStatus = if ($svcStatus) { $svcStatus.Status } else { 'NotFound' }
       Write-Log "⚠️ Could not start service '$svcName' (current status: $currentStatus): $($_)" Yellow
       Write-Log "   This is usually fine - the host registration will handle it." Yellow
     }
