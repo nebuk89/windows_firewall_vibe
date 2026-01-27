@@ -37,12 +37,13 @@ The `rdp_chrome.yml` workflow uses Google's Chrome Remote Desktop for browser-ba
 2. Click **"Begin"** and **"Next"**
 3. Authorize with your Google account
 4. Give your remote computer a name
-5. Copy the entire command shown (the Windows command for setting up the remote desktop host)
+5. Copy the **Windows CMD command** shown (it starts with `"%PROGRAMFILES(X86)%\Google\Chrome Remote Desktop\...`)
+   - ⚠️ **Important:** Use the Windows CMD command, NOT the PowerShell command
 6. Go to the **Actions** tab in this repository
 7. Select **"RDP via Chrome Remote Desktop"** workflow
 8. Click **"Run workflow"**
-9. Paste the command in the **"authcode"** field
-10. Enter a 6-digit PIN in the **"pincode"** field (you'll use this to connect)
+9. Paste the Windows CMD command in the **"authcode"** field
+10. Enter a 6-digit PIN in the **"pincode"** field (longer PINs will be truncated to 6 digits)
 11. Wait for the workflow to complete setup (about 2-3 minutes)
 12. Go to [https://remotedesktop.google.com/access](https://remotedesktop.google.com/access)
 13. Find your computer in the "Remote devices" section and click it
