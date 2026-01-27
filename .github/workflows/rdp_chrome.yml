@@ -106,15 +106,18 @@ jobs:
 
           # Validate that authCommand looks like a Chrome Remote Desktop command
           # Check for the expected command structure to prevent command injection
-          if ($authCommand -notmatch '^["\s]*%PROGRAMFILES\(X86\)%\\Google\\Chrome Remote Desktop\\[^\\]+\\remoting_start_host\.exe.*--code=.*--redirect-url=.*--name=') {
+          # Expected format: "%PROGRAMFILES(X86)%\Google\Chrome Remote Desktop\VERSION\remoting_start_host.exe" --code="..." --redirect-url="..." --name=%COMPUTERNAME%
+          $expectedPattern = '^["\s]*%PROGRAMFILES\(X86\)%\\Google\\Chrome Remote Desktop\\[^\\]+\\remoting_start_host\.exe.*--code=.*--redirect-url=.*--name='
+          if ($authCommand -notmatch $expectedPattern) {
             Write-Host "❌ Error: The provided command doesn't appear to be a valid Chrome Remote Desktop command" -ForegroundColor Red
             Write-Host "Please copy the complete command from https://remotedesktop.google.com/headless" -ForegroundColor Yellow
             Write-Host "Expected format: command should start with '%PROGRAMFILES(X86)%\Google\Chrome Remote Desktop\...\remoting_start_host.exe'" -ForegroundColor Yellow
             exit 1
           }
           
-          # Additional validation: ensure no suspicious characters that could enable command chaining
-          if ($authCommand -match '[;&|<>]') {
+          # Additional validation: ensure no suspicious characters that could enable command injection
+          # Block: semicolons, pipes, ampersands, redirects, backticks, parentheses for command substitution
+          if ($authCommand -match '[;&|<>`()]') {
             Write-Host "❌ Error: Command contains invalid characters that could be used for command injection" -ForegroundColor Red
             exit 1
           }
