@@ -154,21 +154,29 @@ if ($null -ne $svc) {
       # Wait for service to reach Running state
       $timeout = New-TimeSpan -Seconds 10
       $sw = [System.Diagnostics.Stopwatch]::StartNew()
+      $serviceStarted = $false
       do {
         Start-Sleep -Milliseconds 500
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-        if ($null -eq $svc) { throw "Service '$svcName' disappeared during startup - this may indicate an installation issue" }
-        if ($svc.Status -eq 'Running') { break }
+        if ($null -eq $svc) {
+          Write-Log "⚠️ Service '$svcName' disappeared during startup - this may indicate an installation issue" Yellow
+          break
+        }
+        if ($svc.Status -eq 'Running') {
+          $serviceStarted = $true
+          break
+        }
       } while ($sw.Elapsed -lt $timeout)
       
-      if ($svc.Status -eq 'Running') {
+      if ($serviceStarted) {
         Write-Log "✅ Service '$svcName' is $($svc.Status)" Green
       } else {
-        Write-Log "⚠️ Service '$svcName' is $($svc.Status) after $($sw.Elapsed.TotalSeconds)s" Yellow
+        $status = if ($svc) { $svc.Status } else { 'NotFound' }
+        Write-Log "⚠️ Service '$svcName' is $status after $($sw.Elapsed.TotalSeconds)s" Yellow
+        Write-Log "   This is usually fine - the host registration will handle it." Yellow
       }
     } catch {
-      $svcStatus = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-      $currentStatus = if ($svcStatus) { $svcStatus.Status } else { 'NotFound' }
+      $currentStatus = if ($svc) { $svc.Status } else { 'NotFound' }
       Write-Log "⚠️ Could not start service '$svcName' (current status: $currentStatus): $($_)" Yellow
       Write-Log "   This is usually fine - the host registration will handle it." Yellow
     }
