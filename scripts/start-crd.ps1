@@ -143,14 +143,26 @@ if (-not $HostName) { $HostName = if ($parsed.name) { $parsed.name } else { $env
 $hostExe = Ensure-CrdHost
 Ensure-Chrome -Skip:$SkipChromeInstall
 
-# Start service if exists
-$svcName = "Chrome Remote Desktop Service"
+# Start service if exists (optional - the remoting_start_host.exe will handle service start if needed)
+$svcName = "chromoting"
 $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-if ($null -ne $svc -and $svc.Status -ne 'Running') {
-  Write-Log "▶️ Starting service '$svcName'..." Cyan
-  Start-Service $svcName
-  $svc.WaitForStatus('Running','00:00:10') | Out-Null
-  Write-Log "✅ Service '$svcName' is $((Get-Service $svcName).Status)" Green
+if ($null -ne $svc) {
+  if ($svc.Status -ne 'Running') {
+    Write-Log "▶️ Attempting to start service '$svcName'..." Cyan
+    try {
+      Start-Service $svcName -ErrorAction Stop
+      Start-Sleep -Seconds 2
+      $svc.Refresh()
+      Write-Log "✅ Service '$svcName' is $($svc.Status)" Green
+    } catch {
+      Write-Log "⚠️ Could not start service '$svcName': $($_)" Yellow
+      Write-Log "   This is usually fine - the host registration will handle it." Yellow
+    }
+  } else {
+    Write-Log "✅ Service '$svcName' is already running" Green
+  }
+} else {
+  Write-Log "ℹ️ Service '$svcName' not found yet - will be started by host registration" Cyan
 }
 
 $args = @("--code=$($parsed.code)", "--redirect-url=$RedirectUrl", "--name=$HostName", "--pin=$pinDigits")
