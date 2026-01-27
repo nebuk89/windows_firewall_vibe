@@ -154,11 +154,24 @@ if ($null -ne $svc) {
     Write-Log "▶️ Attempting to start service '$svcName'..." Cyan
     try {
       Start-Service $svcName -ErrorAction Stop
-      Start-Sleep -Seconds $ServiceStartWaitSeconds
-      $svc = Get-Service -Name $svcName
-      Write-Log "✅ Service '$svcName' is $($svc.Status)" Green
+      # Wait for service to reach Running state
+      $timeout = New-TimeSpan -Seconds 10
+      $sw = [System.Diagnostics.Stopwatch]::StartNew()
+      do {
+        Start-Sleep -Milliseconds 500
+        $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+        if ($null -eq $svc) { throw "Service disappeared during startup" }
+        if ($svc.Status -eq 'Running') { break }
+      } while ($sw.Elapsed -lt $timeout)
+      
+      if ($svc.Status -eq 'Running') {
+        Write-Log "✅ Service '$svcName' is $($svc.Status)" Green
+      } else {
+        Write-Log "⚠️ Service '$svcName' is $($svc.Status) after $($sw.Elapsed.TotalSeconds)s" Yellow
+      }
     } catch {
-      Write-Log "⚠️ Could not start service '$svcName': $($_)" Yellow
+      $currentStatus = (Get-Service -Name $svcName -ErrorAction SilentlyContinue)?.Status
+      Write-Log "⚠️ Could not start service '$svcName' (current status: $currentStatus): $($_)" Yellow
       Write-Log "   This is usually fine - the host registration will handle it." Yellow
     }
   } else {
