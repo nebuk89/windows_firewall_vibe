@@ -155,7 +155,7 @@ if ($null -ne $svc) {
     try {
       Start-Service $svcName -ErrorAction Stop
       Start-Sleep -Seconds $ServiceStartWaitSeconds
-      $svc.Refresh()
+      $svc = Get-Service -Name $svcName
       Write-Log "✅ Service '$svcName' is $($svc.Status)" Green
     } catch {
       Write-Log "⚠️ Could not start service '$svcName': $($_)" Yellow
