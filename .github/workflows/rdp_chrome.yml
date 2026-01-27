@@ -95,8 +95,8 @@ jobs:
           Write-Host "🚀 Starting Chrome Remote Desktop..." -ForegroundColor Cyan
           Write-Host ""
 
-          $authCommand = "${{ github.event.inputs.authcode }}"
-          $pin = "${{ github.event.inputs.pincode }}"
+          $authCommand = '${{ github.event.inputs.authcode }}'
+          $pin = '${{ github.event.inputs.pincode }}'
 
           # Validate PIN is 6 digits
           if ($pin -notmatch '^\d{6}$') {
