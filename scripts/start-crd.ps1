@@ -157,7 +157,7 @@ if ($null -ne $svc) {
       do {
         Start-Sleep -Milliseconds 500
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-        if ($null -eq $svc) { throw "Service disappeared during startup" }
+        if ($null -eq $svc) { throw "Service '$svcName' disappeared during startup - this may indicate an installation issue" }
         if ($svc.Status -eq 'Running') { break }
       } while ($sw.Elapsed -lt $timeout)
       
