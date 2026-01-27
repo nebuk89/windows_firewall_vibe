@@ -20,6 +20,9 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Configuration
+$ServiceStartWaitSeconds = 2
+
 function Write-Log {
   param(
     [Parameter(Mandatory = $true)][string]$Message,
@@ -151,7 +154,7 @@ if ($null -ne $svc) {
     Write-Log "▶️ Attempting to start service '$svcName'..." Cyan
     try {
       Start-Service $svcName -ErrorAction Stop
-      Start-Sleep -Seconds 2
+      Start-Sleep -Seconds $ServiceStartWaitSeconds
       $svc.Refresh()
       Write-Log "✅ Service '$svcName' is $($svc.Status)" Green
     } catch {
