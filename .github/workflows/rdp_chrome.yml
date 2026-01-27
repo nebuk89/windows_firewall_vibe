@@ -116,8 +116,15 @@ jobs:
           }
           
           # Additional validation: ensure no suspicious characters that could enable command injection
-          # Block: semicolons, pipes, ampersands, redirects, backticks, parentheses for command substitution
-          if ($authCommand -match '[;&|<>`()]') {
+          # Block: semicolons, pipes, ampersands, redirects, backticks
+          # Note: We allow parentheses only within known safe Windows environment variables
+          # Whitelist approach: replace only known safe env vars with parentheses, then check for dangerous chars
+          $tempCommand = $authCommand
+          # Replace known safe environment variables that contain parentheses
+          $tempCommand = $tempCommand -replace '%PROGRAMFILES\(X86\)%', '%ENVVAR%'
+          $tempCommand = $tempCommand -replace '%ProgramFiles\(x86\)%', '%ENVVAR%'
+          
+          if ($tempCommand -match '[;&|<>`()]') {
             Write-Host "❌ Error: Command contains invalid characters that could be used for command injection" -ForegroundColor Red
             exit 1
           }
