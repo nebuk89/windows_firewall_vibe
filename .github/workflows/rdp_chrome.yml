@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Chrome Remote Desktop command from https://remotedesktop.google.com/headless (PowerShell command)'
+        description: 'Chrome Remote Desktop command from https://remotedesktop.google.com/headless (Windows command)'
         required: true
         type: string
       pincode:
@@ -31,7 +31,7 @@ jobs:
           Write-Host "1. Go to https://remotedesktop.google.com/headless" -ForegroundColor White
           Write-Host "2. Click 'Begin' and 'Next'" -ForegroundColor White
           Write-Host "3. Authorize and name your computer" -ForegroundColor White
-          Write-Host "4. Copy the PowerShell command shown" -ForegroundColor White
+          Write-Host "4. Copy the Windows command shown" -ForegroundColor White
           Write-Host "5. Paste it as the 'authcode' input when running this workflow" -ForegroundColor White
           Write-Host ""
 
@@ -105,16 +105,28 @@ jobs:
           }
 
           # Validate that authCommand looks like a Chrome Remote Desktop command
-          if ($authCommand -notmatch 'DISPLAY=.*chrome-remote-desktop.*--start') {
+          # Check for the expected command structure to prevent command injection
+          # Expected format: "%PROGRAMFILES(X86)%\Google\Chrome Remote Desktop\VERSION\remoting_start_host.exe" --code="..." --redirect-url="..." --name=%COMPUTERNAME%
+          $expectedPattern = '^["\s]*%PROGRAMFILES\(X86\)%\\Google\\Chrome Remote Desktop\\[^\\]+\\remoting_start_host\.exe.*--code=.*--redirect-url=.*--name='
+          if ($authCommand -notmatch $expectedPattern) {
             Write-Host "❌ Error: The provided command doesn't appear to be a valid Chrome Remote Desktop command" -ForegroundColor Red
-            Write-Host "Please copy the complete PowerShell command from https://remotedesktop.google.com/headless" -ForegroundColor Yellow
+            Write-Host "Please copy the complete command from https://remotedesktop.google.com/headless" -ForegroundColor Yellow
+            Write-Host "Expected format: command should start with '%PROGRAMFILES(X86)%\Google\Chrome Remote Desktop\...\remoting_start_host.exe'" -ForegroundColor Yellow
+            exit 1
+          }
+          
+          # Additional validation: ensure no suspicious characters that could enable command injection
+          # Block: semicolons, pipes, ampersands, redirects, backticks, parentheses for command substitution
+          if ($authCommand -match '[;&|<>`()]') {
+            Write-Host "❌ Error: Command contains invalid characters that could be used for command injection" -ForegroundColor Red
             exit 1
           }
 
           # Execute the auth command with the PIN
           try {
+            # Use cmd.exe to execute the command as it may contain CMD-style environment variables
             $fullCommand = "$authCommand -pin=$pin"
-            Invoke-Expression $fullCommand
+            cmd.exe /c $fullCommand
 
             Write-Host ""
             Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
