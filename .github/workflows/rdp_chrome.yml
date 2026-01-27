@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       authcode:
-        description: 'Chrome Remote Desktop command from https://remotedesktop.google.com/headless (Windows command)'
+        description: 'Chrome Remote Desktop command from https://remotedesktop.google.com/headless (Windows CMD command - starts with "%PROGRAMFILES(X86)%")'
         required: true
         type: string
       pincode:
-        description: 'Six digit PIN for connection'
+        description: 'Six digit PIN for connection (will be truncated to 6 digits if longer)'
         required: true
         type: string
 
@@ -31,8 +31,10 @@ jobs:
           Write-Host "1. Go to https://remotedesktop.google.com/headless" -ForegroundColor White
           Write-Host "2. Click 'Begin' and 'Next'" -ForegroundColor White
           Write-Host "3. Authorize and name your computer" -ForegroundColor White
-          Write-Host "4. Copy the Windows command shown" -ForegroundColor White
+          Write-Host "4. Copy the Windows CMD command shown (starts with '%PROGRAMFILES(X86)%')" -ForegroundColor White
           Write-Host "5. Paste it as the 'authcode' input when running this workflow" -ForegroundColor White
+          Write-Host ""
+          Write-Host "⚠️  Important: Use the Windows CMD command, NOT the PowerShell command" -ForegroundColor Yellow
           Write-Host ""
 
       - name: Checkout code
@@ -98,9 +100,17 @@ jobs:
           $authCommand = '${{ github.event.inputs.authcode }}'
           $pin = '${{ github.event.inputs.pincode }}'
 
-          # Validate PIN is 6 digits
-          if ($pin -notmatch '^\d{6}$') {
-            Write-Host "❌ Error: PIN must be exactly 6 digits" -ForegroundColor Red
+          # Strip PIN to max 6 characters and validate it contains only digits
+          $pin = $pin.Substring(0, [Math]::Min($pin.Length, 6))
+          
+          if ($pin -notmatch '^\d+$') {
+            Write-Host "❌ Error: PIN must contain only digits" -ForegroundColor Red
+            exit 1
+          }
+          
+          if ($pin.Length -ne 6) {
+            Write-Host "❌ Error: PIN must be exactly 6 digits (got $($pin.Length) digits after truncation)" -ForegroundColor Red
+            Write-Host "Please enter at least 6 digits" -ForegroundColor Yellow
             exit 1
           }
 
@@ -132,7 +142,7 @@ jobs:
           # Execute the auth command with the PIN
           try {
             # Use cmd.exe to execute the command as it may contain CMD-style environment variables
-            $fullCommand = "$authCommand -pin=$pin"
+            $fullCommand = "$authCommand --pin=$pin"
             cmd.exe /c $fullCommand
 
             Write-Host ""
