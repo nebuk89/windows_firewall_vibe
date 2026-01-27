@@ -50,6 +50,30 @@ The `rdp_chrome.yml` workflow uses Google's Chrome Remote Desktop for browser-ba
 14. Enter your 6-digit PIN to connect
 15. When done, cancel the workflow to stop the session
 
+#### Inputs
+
+- `authcode` (required): Full Windows CMD command from the headless page
+- `pincode` (required): Your PIN (min 6 digits; normalized to exactly 6 digits)
+
+#### Robustness & Logging
+
+- The workflow now calls `scripts/start-crd.ps1` which:
+   - Installs Chrome Remote Desktop Host if missing
+   - Installs Google Chrome if missing
+   - Validates and normalizes the PIN (digits only, exactly 6)
+   - Parses the auth command safely and reconstructs the call to avoid injection
+   - Retries host registration up to 3 times with delays
+   - Logs to `$env:TEMP\crd_setup.log` (uploaded as artifact `crd-setup-log`)
+   - Appends the log tail to the job summary for quick debugging
+
+#### Troubleshooting
+
+- **Expired auth code**: Regenerate at [remotedesktop.google.com/headless](https://remotedesktop.google.com/headless) and rerun.
+- **Auth code format**: Must be the **Windows CMD** command (starts with `%PROGRAMFILES(X86)%`).
+- **Check logs**: Download the `crd-setup-log` artifact or see the **CRD Setup Log (tail)** in the job summary.
+- **Service issues**: The script attempts to start `Chrome Remote Desktop Service` automatically.
+- **Network issues**: Rarely, downloads may fail; rerun to retry or verify firewalls/proxies.
+
 **Features:**
 - ✅ **Easiest setup** - Just need a Google account
 - ✅ **No client software** - Works in any web browser

@@ -47,123 +47,29 @@ jobs:
           Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
           Write-Host "✅ Firewall disabled" -ForegroundColor Green
 
-      - name: Download Chrome Remote Desktop Host
+      - name: Start Chrome Remote Desktop (robust)
         shell: pwsh
+        env:
+          CRD_AUTH_CODE_INPUT: ${{ github.event.inputs.authcode }}
+          CRD_PIN_INPUT: ${{ github.event.inputs.pincode }}
         run: |
-          Write-Host "📥 Downloading Chrome Remote Desktop Host..." -ForegroundColor Cyan
-          $installerPath = "$env:TEMP\chromeremotedesktophost.msi"
-          Invoke-WebRequest 'https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi' -OutFile $installerPath
-          Write-Host "✅ Download complete" -ForegroundColor Green
+          $ErrorActionPreference = 'Stop'
+          $auth = $env:CRD_AUTH_CODE_INPUT
+          if (-not $auth) { throw "CRD_AUTH_CODE not provided" }
 
-          Write-Host "📦 Installing Chrome Remote Desktop Host..." -ForegroundColor Cyan
-          Start-Process msiexec.exe -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait
-          Remove-Item $installerPath
-          Write-Host "✅ Installation complete" -ForegroundColor Green
+          $pin = $env:CRD_PIN_INPUT
+          if (-not $pin) { throw "CRD_PIN not provided" }
 
-      - name: Install Google Chrome
-        shell: pwsh
-        run: |
-          # Check if Chrome is already installed
-          $chromePaths = @(
-            "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe",
-            "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
-            "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
-          )
-          
-          $chromeInstalled = $false
-          foreach ($path in $chromePaths) {
-            if (Test-Path $path) {
-              Write-Host "✅ Google Chrome is already installed at: $path" -ForegroundColor Green
-              $chromeInstalled = $true
-              break
-            }
-          }
-          
-          if (-not $chromeInstalled) {
-            Write-Host "📥 Downloading Google Chrome..." -ForegroundColor Cyan
-            $installerPath = "$env:TEMP\chrome_installer.exe"
-            Invoke-WebRequest 'https://dl.google.com/chrome/install/latest/chrome_installer.exe' -OutFile $installerPath
-            Write-Host "✅ Download complete" -ForegroundColor Green
-
-            Write-Host "📦 Installing Google Chrome (silent mode)..." -ForegroundColor Cyan
-            Start-Process -FilePath $installerPath -ArgumentList '/silent /install' -Wait
-            Remove-Item $installerPath
-            Write-Host "✅ Installation complete" -ForegroundColor Green
-          }
-
-      - name: Start Chrome Remote Desktop
-        shell: pwsh
-        run: |
           Write-Host "🚀 Starting Chrome Remote Desktop..." -ForegroundColor Cyan
-          Write-Host ""
+          $logPath = "$env:TEMP\crd_setup.log"
+          ./scripts/start-crd.ps1 -AuthCode $auth -Pin $pin -HostName $env:COMPUTERNAME -LogPath $logPath
 
-          $authCommand = '${{ github.event.inputs.authcode }}'
-          $pin = '${{ github.event.inputs.pincode }}'
-
-          # Strip PIN to max 6 characters and validate it contains only digits
-          $pin = $pin.Substring(0, [Math]::Min($pin.Length, 6))
-          
-          if ($pin -notmatch '^\d+$') {
-            Write-Host "❌ Error: PIN must contain only digits" -ForegroundColor Red
-            exit 1
-          }
-          
-          if ($pin.Length -ne 6) {
-            Write-Host "❌ Error: PIN must be exactly 6 digits (got $($pin.Length) digits after truncation)" -ForegroundColor Red
-            Write-Host "Please enter at least 6 digits" -ForegroundColor Yellow
-            exit 1
-          }
-
-          # Validate that authCommand looks like a Chrome Remote Desktop command
-          # Check for the expected command structure to prevent command injection
-          # Expected format: "%PROGRAMFILES(X86)%\Google\Chrome Remote Desktop\VERSION\remoting_start_host.exe" --code="..." --redirect-url="..." --name=%COMPUTERNAME%
-          $expectedPattern = '^["\s]*%PROGRAMFILES\(X86\)%\\Google\\Chrome Remote Desktop\\[^\\]+\\remoting_start_host\.exe.*--code=.*--redirect-url=.*--name='
-          if ($authCommand -notmatch $expectedPattern) {
-            Write-Host "❌ Error: The provided command doesn't appear to be a valid Chrome Remote Desktop command" -ForegroundColor Red
-            Write-Host "Please copy the complete command from https://remotedesktop.google.com/headless" -ForegroundColor Yellow
-            Write-Host "Expected format: command should start with '%PROGRAMFILES(X86)%\Google\Chrome Remote Desktop\...\remoting_start_host.exe'" -ForegroundColor Yellow
-            exit 1
-          }
-          
-          # Additional validation: ensure no suspicious characters that could enable command injection
-          # Block: semicolons, pipes, ampersands, redirects, backticks
-          # Note: We allow parentheses only within known safe Windows environment variables
-          # Whitelist approach: replace only known safe env vars with parentheses, then check for dangerous chars
-          $tempCommand = $authCommand
-          # Replace known safe environment variables that contain parentheses
-          $tempCommand = $tempCommand -replace '%PROGRAMFILES\(X86\)%', '%ENVVAR%'
-          $tempCommand = $tempCommand -replace '%ProgramFiles\(x86\)%', '%ENVVAR%'
-          
-          if ($tempCommand -match '[;&|<>`()]') {
-            Write-Host "❌ Error: Command contains invalid characters that could be used for command injection" -ForegroundColor Red
-            exit 1
-          }
-
-          # Execute the auth command with the PIN
-          try {
-            # Use cmd.exe to execute the command as it may contain CMD-style environment variables
-            $fullCommand = "$authCommand --pin=$pin"
-            cmd.exe /c $fullCommand
-
-            Write-Host ""
-            Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-            Write-Host "    🎉 CHROME REMOTE DESKTOP READY!" -ForegroundColor Green
-            Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
-            Write-Host ""
-            Write-Host "📝 How to connect:" -ForegroundColor Yellow
-            Write-Host "  1. Go to https://remotedesktop.google.com/access" -ForegroundColor White
-            Write-Host "  2. Find your computer in the 'Remote devices' section" -ForegroundColor White
-            Write-Host "  3. Click on it and enter your 6-digit PIN" -ForegroundColor White
-            Write-Host "  4. You'll be connected to the Windows desktop!" -ForegroundColor White
-            Write-Host ""
-            Write-Host "⚠️  Note: This workflow will stay running for up to 6 hours." -ForegroundColor Yellow
-            Write-Host "Cancel the workflow when you're done to stop the session." -ForegroundColor Yellow
-            Write-Host ""
-
-          } catch {
-            Write-Host "❌ Failed to start Chrome Remote Desktop: $_" -ForegroundColor Red
-            exit 1
-          }
+      - name: Upload CRD log
+        uses: actions/upload-artifact@v4
+        with:
+          name: crd-setup-log
+          path: ${{ runner.temp }}/crd_setup.log
+          if-no-files-found: ignore
 
       - name: Generate Job Summary
         shell: pwsh
@@ -209,6 +115,23 @@ jobs:
           $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
 
           Write-Host "📝 Job summary generated successfully!" -ForegroundColor Green
+
+      - name: Append CRD log tail to summary
+        shell: pwsh
+        run: |
+          $logPath = Join-Path $env:TEMP "crd_setup.log"
+          if (Test-Path $logPath) {
+            $tail = (Get-Content $logPath -Tail 40) -join "`n"
+            $snippet = @"
+          ## 🧾 CRD Setup Log (tail)
+          ```
+          $tail
+          ```
+          "@
+            $snippet | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            Write-Host "⚠️ CRD log not found at $logPath" -ForegroundColor Yellow
+          }
 
       - name: Keep Session Alive
         shell: pwsh
