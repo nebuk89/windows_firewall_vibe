@@ -109,7 +109,8 @@ jobs:
           }
           
           if ($pin.Length -ne 6) {
-            Write-Host "❌ Error: PIN must be at least 6 digits (got $($pin.Length) digits)" -ForegroundColor Red
+            Write-Host "❌ Error: PIN must be exactly 6 digits (got $($pin.Length) digits after truncation)" -ForegroundColor Red
+            Write-Host "Please enter at least 6 digits" -ForegroundColor Yellow
             exit 1
           }
 
