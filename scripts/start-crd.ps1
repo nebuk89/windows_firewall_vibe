@@ -156,7 +156,7 @@ if ($null -ne $svc -and $svc.Status -ne 'Running') {
 $args = @("--code=$($parsed.code)", "--redirect-url=$RedirectUrl", "--name=$HostName", "--pin=$pinDigits")
 
 for ($attempt = 1; $attempt -le $RetryCount; $attempt++) {
-  Write-Log "▶️ Attempt $attempt: registering host..." Cyan
+  Write-Log "▶️ Attempt $($attempt): registering host..." Cyan
   $output = & $hostExe @args 2>&1
   $exit = $LASTEXITCODE
   if ($exit -eq 0) {
