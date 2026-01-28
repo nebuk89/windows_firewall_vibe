@@ -66,16 +66,33 @@ jobs:
             Write-Host "  1. Go to Settings > Secrets and variables > Actions" -ForegroundColor White
             Write-Host "  2. Click 'New repository secret'" -ForegroundColor White
             Write-Host "  3. Name: PASSWORD" -ForegroundColor White
-            Write-Host "  4. Value: Your desired RDP password" -ForegroundColor White
+            Write-Host "  4. Value: Your desired RDP password (must meet complexity requirements)" -ForegroundColor White
             Write-Host "" -ForegroundColor Yellow
             exit 1
           }
 
-          # Set password for the existing runneradmin user
-          $securePassword = ConvertTo-SecureString -AsPlainText $env:RDP_PASSWORD -Force
-          Set-LocalUser -Name "runneradmin" -Password $securePassword
+          # Validate password length (Windows requires at least 6 characters typically)
+          if ($env:RDP_PASSWORD.Length -lt 6) {
+            Write-Host "❌ ERROR: PASSWORD is too short (minimum 6 characters required)" -ForegroundColor Red
+            exit 1
+          }
 
-          Write-Host "✅ User configured successfully" -ForegroundColor Green
+          # Set password for the existing runneradmin user
+          try {
+            $securePassword = ConvertTo-SecureString -AsPlainText $env:RDP_PASSWORD -Force
+            Set-LocalUser -Name "runneradmin" -Password $securePassword -ErrorAction Stop
+            Write-Host "✅ User configured successfully" -ForegroundColor Green
+          } catch {
+            Write-Host "❌ ERROR: Failed to set password: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "" -ForegroundColor Yellow
+            Write-Host "Password may not meet Windows complexity requirements:" -ForegroundColor Yellow
+            Write-Host "  - At least 8 characters recommended" -ForegroundColor White
+            Write-Host "  - Mix of uppercase, lowercase, numbers, and symbols" -ForegroundColor White
+            Write-Host "  - Example: MyP@ssw0rd!" -ForegroundColor White
+            Write-Host "" -ForegroundColor Yellow
+            exit 1
+          }
+
           Write-Host ""
           Write-Host "Username: runneradmin" -ForegroundColor White
           Write-Host "Password: (configured from secrets)" -ForegroundColor White
