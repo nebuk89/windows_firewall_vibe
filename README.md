@@ -9,16 +9,14 @@ This repository contains several GitHub Actions workflows:
 1. **Windows Firewall Demo** (`windows_test.yml`) - Demonstrates blocking/allowing outbound traffic
 2. **RDP via Chrome Remote Desktop** (`rdp_chrome.yml`) - ✅ **Working RDP access** using Chrome Remote Desktop (easiest, no account required)
 3. **RDP via ngrok** (`rdp_ngrok.yml`) - ✅ **Working RDP access** using ngrok reverse tunnel
-4. **RDP via Cloudflare Tunnel** (`rdp_cloudflared.yml`) - ✅ **Working RDP access** using Cloudflare tunnel (best performance)
-5. **RDP Access Setup** (`rdp_access.yml`) - Original demonstration (connections blocked by GitHub network)
+4. **RDP Access Setup** (`rdp_access.yml`) - Original demonstration (connections blocked by GitHub network)
 
-## 🍎 Mac Users: All Solutions Work!
+## 🍎 Mac Users: Both Solutions Work!
 
-All three RDP access methods fully support Mac:
+Both RDP access methods fully support Mac:
 
 - **Chrome Remote Desktop** (Easiest) - Works in any browser (Safari, Chrome, Firefox). Just go to [remotedesktop.google.com/access](https://remotedesktop.google.com/access)
 - **ngrok** - Use [Microsoft Remote Desktop](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466) from the Mac App Store (free)
-- **Cloudflare Tunnel** - Install cloudflared with `brew install cloudflared`, then use Microsoft Remote Desktop
 
 👉 **Recommended for Mac**: Chrome Remote Desktop (no installation needed) or ngrok (traditional RDP experience)
 
@@ -114,95 +112,21 @@ The `rdp_ngrok.yml` workflow uses ngrok to create a reverse tunnel, bypassing Gi
 - ✅ Multiple region options for better latency
 - ❌ Requires ngrok account and configuration
 
-### Option 3: RDP via Cloudflare Tunnel (Best Performance)
-
-The `rdp_cloudflared.yml` workflow uses Cloudflare Tunnel for better performance and lower latency.
-
-#### Prerequisites
-1. Configure repository secret:
-   - `PASSWORD` - Password for the RDP connection
-2. Install cloudflared on your local machine:
-   - **macOS**: `brew install cloudflared`
-   - **Windows**: `winget install Cloudflare.cloudflared`
-   - **Linux**: [See releases](https://github.com/cloudflare/cloudflared/releases/latest)
-3. Install GitHub CLI and authenticate: `gh auth login`
-
-#### 🚀 Quick Start (CLI Tool)
-
-The easiest way to connect is using the included CLI tool:
-
-```bash
-# Clone the repo (if you haven't already)
-git clone https://github.com/nebuk89/windows_firewall_vibe.git
-cd windows_firewall_vibe
-
-# Run the CLI tool
-./cli/rdp-connect.py
-```
-
-The CLI tool will:
-1. Trigger the Cloudflare Tunnel workflow automatically
-2. Poll the workflow logs until the tunnel URL appears
-3. Start `cloudflared` locally to create the tunnel
-4. Display the localhost address to connect with your RDP client
-
-**Example output:**
-```
-╔═══════════════════════════════════════════════════════════════╗
-║                    🎉 SESSION READY!                          ║
-╠═══════════════════════════════════════════════════════════════╣
-║  📍 Connect to: localhost:13389                               ║
-║  👤 Username:   runneradmin                                   ║
-║  🔑 Password:   (your PASSWORD secret)                        ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Open Remote Desktop Connection (mstsc.exe) and connect!      ║
-╚═══════════════════════════════════════════════════════════════╝
-```
-
-**CLI Options:**
-```bash
-./cli/rdp-connect.py --help
-./cli/rdp-connect.py --local-port 3390      # Use a different local port
-./cli/rdp-connect.py --run-id 12345678      # Attach to an existing workflow run
-```
-
-#### Manual Method
-1. Go to the **Actions** tab in this repository
-2. Select **"RDP via Cloudflare Tunnel"** workflow
-3. Click **"Run workflow"**
-4. Wait for the workflow to start and display the tunnel URL
-5. Run the local tunnel command (shown in workflow logs):
-   ```bash
-   cloudflared access tcp --hostname <tunnel-url> --url localhost:13389
-   ```
-6. Open your RDP client and connect to `localhost:13389`:
-   - **Windows**: Remote Desktop Connection (mstsc.exe)
-   - **Mac**: Microsoft Remote Desktop (download from [Mac App Store](https://apps.apple.com/app/microsoft-remote-desktop/id1295203466))
-   - **Linux**: Remmina or other RDP client
-7. Login with username `runneradmin` and your PASSWORD secret
-8. When done, cancel the workflow to stop the session
-
-
-**Features:**
-- ✅ Better performance and lower latency than ngrok
-- ✅ No account or authentication required
-- ✅ Enterprise-grade Cloudflare infrastructure
-- ✅ More stable connections for longer sessions
-
 ## 📋 Comparison
 
-| Feature | Chrome Remote Desktop | ngrok | Cloudflare Tunnel |
-|---------|----------------------|-------|-------------------|
-| Setup Difficulty | ⭐ Easiest | ⭐⭐ Easy | ⭐⭐⭐ Moderate |
-| Performance | Good | Good | Excellent |
-| Authentication Required | Google account only | Yes (free tier) | No |
-| Client Software | Browser only | RDP client | cloudflared + RDP client |
-| Connection Method | Browser-based | Direct RDP | Local tunnel + RDP |
-| **Mac Support** | ✅ **Yes (browser)** | ✅ **Yes (MS Remote Desktop)** | ✅ **Yes (MS Remote Desktop)** |
-| Windows Support | ✅ Yes | ✅ Yes | ✅ Yes |
-| Linux Support | ✅ Yes | ✅ Yes | ✅ Yes |
-| Audio Support | ❌ No | ✅ Yes | ✅ Yes |
-| Best For | Quick GUI access | Traditional RDP users | Extended sessions |
+| Feature | Chrome Remote Desktop | ngrok |
+|---------|----------------------|-------|
+| Setup Difficulty | ⭐ Easiest | ⭐⭐ Easy |
+| **Works for RDP** | ✅ Yes | ✅ Yes |
+| Performance | Good | Good |
+| Authentication Required | Google account only | Yes (free tier) |
+| Client Software | Browser only | RDP client |
+| Connection Method | Browser-based | Direct RDP |
+| **Mac Support** | ✅ **Yes (browser)** | ✅ **Yes (MS Remote Desktop)** |
+| Windows Support | ✅ Yes | ✅ Yes |
+| Linux Support | ✅ Yes | ✅ Yes |
+| Audio Support | ❌ No | ✅ Yes |
+| Best For | Quick GUI access | Traditional RDP users |
 
 ## 🖥️ Original RDP Workflow (Non-Working)
 
