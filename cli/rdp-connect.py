@@ -291,7 +291,7 @@ def main():
 
     cloudflared_cmd = [
         cloudflared_path,
-        "access", "rdp",
+        "access", "tcp",
         "--hostname", tunnel_url,
         "--url", f"localhost:{args.local_port}"
     ]

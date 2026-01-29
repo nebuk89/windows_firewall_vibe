@@ -173,7 +173,7 @@ The CLI tool will:
 4. Wait for the workflow to start and display the tunnel URL
 5. Run the local tunnel command (shown in workflow logs):
    ```bash
-   cloudflared access rdp --hostname <tunnel-url> --url localhost:13389
+   cloudflared access tcp --hostname <tunnel-url> --url localhost:13389
    ```
 6. Open your RDP client and connect to `localhost:13389`:
    - **Windows**: Remote Desktop Connection (mstsc.exe)
