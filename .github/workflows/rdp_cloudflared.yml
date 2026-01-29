@@ -102,19 +102,17 @@ jobs:
         run: |
           Write-Host "🚇 Starting Cloudflare tunnel..." -ForegroundColor Cyan
           
-          # Create a log file for cloudflared output
-          $logFile = "C:\cloudflared.log"
+          # Start cloudflared as a background process
+          # Using Start-Process which spawns an independent process that survives step boundaries
+          $proc = Start-Process -FilePath ".\cloudflared.exe" `
+            -ArgumentList "tunnel","--url","tcp://localhost:3389" `
+            -RedirectStandardError "C:\cloudflared.log" `
+            -PassThru `
+            -WindowStyle Hidden
           
-          # Start cloudflared as a background job that keeps running
-          # Redirect both stdout and stderr to the log file
-          $job = Start-Job -ScriptBlock {
-            param($exePath, $logFile)
-            & $exePath tunnel --url tcp://localhost:3389 2>&1 | Tee-Object -FilePath $logFile
-          } -ArgumentList (Resolve-Path ".\cloudflared.exe").Path, $logFile
+          Write-Host "Cloudflared started with PID: $($proc.Id)" -ForegroundColor Gray
           
-          Write-Host "Cloudflared job started (ID: $($job.Id))" -ForegroundColor Gray
-          
-          # Wait for tunnel URL to appear in the output (poll the log file)
+          # Wait for tunnel URL to appear in logs
           Write-Host "Waiting for tunnel to initialize..." -ForegroundColor Yellow
           $tunnelUrl = $null
           $urlPattern = 'https://[a-zA-Z0-9\-]+\.trycloudflare\.com'
@@ -125,8 +123,8 @@ jobs:
             Start-Sleep -Seconds 2
             $waited += 2
             
-            if (Test-Path $logFile) {
-              $content = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
+            if (Test-Path "C:\cloudflared.log") {
+              $content = Get-Content "C:\cloudflared.log" -Raw -ErrorAction SilentlyContinue
               if ($content) {
                 $match = [regex]::Match($content, $urlPattern)
                 if ($match.Success) {
@@ -134,44 +132,28 @@ jobs:
                 }
               }
             }
-            
-            # Also check job output
-            $jobOutput = Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue
-            if ($jobOutput) {
-              $outputText = $jobOutput -join "`n"
-              $match = [regex]::Match($outputText, $urlPattern)
-              if ($match.Success) {
-                $tunnelUrl = $match.Value
-              }
-            }
-            
             Write-Host "." -NoNewline
           }
           Write-Host ""
           
-          # Check if job is still running
-          $job = Get-Job -Id $job.Id -ErrorAction SilentlyContinue
-          if ($job.State -eq 'Failed' -or $job.State -eq 'Completed') {
-            Write-Host "❌ Cloudflared exited unexpectedly (State: $($job.State))" -ForegroundColor Red
-            Write-Host "Job output:" -ForegroundColor Yellow
-            Receive-Job -Job $job
-            if (Test-Path $logFile) {
-              Write-Host "Log file contents:" -ForegroundColor Yellow
-              Get-Content $logFile
-            }
+          # Debug: Show process status
+          $cfProc = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+          if ($cfProc) {
+            Write-Host "✅ Cloudflared process is running (PID: $($cfProc.Id), Name: $($cfProc.ProcessName))" -ForegroundColor Green
+          } else {
+            Write-Host "❌ Cloudflared process NOT running!" -ForegroundColor Red
+            Write-Host "Log contents:" -ForegroundColor Yellow
+            if (Test-Path "C:\cloudflared.log") { Get-Content "C:\cloudflared.log" }
             exit 1
           }
           
           if (-not $tunnelUrl) {
             Write-Host "❌ Failed to get tunnel URL after ${maxWait}s" -ForegroundColor Red
-            Write-Host "Log file contents:" -ForegroundColor Yellow
-            if (Test-Path $logFile) { Get-Content $logFile }
-            Write-Host "Job output:" -ForegroundColor Yellow
-            Receive-Job -Job $job
+            Write-Host "Log contents:" -ForegroundColor Yellow
+            if (Test-Path "C:\cloudflared.log") { Get-Content "C:\cloudflared.log" }
             exit 1
           }
           
-          # Remove https:// prefix for display
           $cleanUrl = $tunnelUrl -replace "https://", ""
           
           Write-Host ""
@@ -183,31 +165,57 @@ jobs:
           Write-Host "👤 Username: runneradmin" -ForegroundColor Cyan
           Write-Host "🔑 Password: (your PASSWORD secret)" -ForegroundColor Cyan
           Write-Host ""
-          Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+          Write-Host "📝 Run on your local machine:" -ForegroundColor Yellow
+          Write-Host "   cloudflared access tcp --hostname $cleanUrl --url localhost:13389" -ForegroundColor Cyan
           Write-Host ""
-          Write-Host "📝 How to connect:" -ForegroundColor Yellow
-          Write-Host "  1. Download cloudflared: https://github.com/cloudflare/cloudflared/releases/latest" -ForegroundColor White
-          Write-Host "  2. Run on your local machine:" -ForegroundColor White
-          Write-Host "     cloudflared access tcp --hostname $cleanUrl --url localhost:13389" -ForegroundColor Cyan
-          Write-Host "  3. Open Remote Desktop Connection (mstsc.exe)" -ForegroundColor White
-          Write-Host "  4. Connect to: localhost:13389" -ForegroundColor White
-          Write-Host "  5. Login with username 'runneradmin' and your password" -ForegroundColor White
-          Write-Host ""
-          Write-Host "💡 Note: Port 13389 on localhost is just an example, use any available port" -ForegroundColor Yellow
+          Write-Host "Then connect RDP to: localhost:13389" -ForegroundColor White
           Write-Host ""
           
-          # Verify cloudflared is still running
-          $cfProcess = Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue
-          if ($cfProcess) {
-            Write-Host "✅ Cloudflared process is running (PID: $($cfProcess.Id))" -ForegroundColor Green
-          } else {
-            Write-Host "⚠️ Warning: Cloudflared process not found - tunnel may not be active" -ForegroundColor Yellow
+          # Save for other steps
+          "TUNNEL_URL=$cleanUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$($proc.Id)" | Out-File -FilePath "C:\cloudflared.pid" -Encoding ascii
+
+      - name: Debug Process State
+        shell: pwsh
+        run: |
+          Write-Host "🔍 Checking cloudflared process state after step boundary..." -ForegroundColor Cyan
+          
+          # Method 1: Check by saved PID
+          if (Test-Path "C:\cloudflared.pid") {
+            $savedPid = Get-Content "C:\cloudflared.pid" -Raw
+            $savedPid = $savedPid.Trim()
+            Write-Host "Saved PID: $savedPid" -ForegroundColor Gray
+            $proc = Get-Process -Id $savedPid -ErrorAction SilentlyContinue
+            if ($proc) {
+              Write-Host "✅ Process by PID is ALIVE: $($proc.ProcessName) (PID: $($proc.Id))" -ForegroundColor Green
+            } else {
+              Write-Host "❌ Process by PID is DEAD" -ForegroundColor Red
+            }
           }
           
-          # Save to environment for job summary
-          "TUNNEL_URL=$cleanUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "TUNNEL_FULL_URL=$tunnelUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
-      
+          # Method 2: Check by name
+          $cfProcs = Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue
+          if ($cfProcs) {
+            Write-Host "✅ Found cloudflared process(es) by name:" -ForegroundColor Green
+            $cfProcs | ForEach-Object { Write-Host "   PID: $($_.Id), CPU: $($_.CPU)s" -ForegroundColor Gray }
+          } else {
+            Write-Host "❌ No cloudflared process found by name" -ForegroundColor Red
+          }
+          
+          # Method 3: Show all running processes (for debugging)
+          Write-Host ""
+          Write-Host "All processes containing 'cloud':" -ForegroundColor Yellow
+          Get-Process | Where-Object { $_.ProcessName -like "*cloud*" } | Format-Table Id, ProcessName, CPU -AutoSize
+          
+          # Show log tail
+          Write-Host ""
+          Write-Host "Cloudflared log tail:" -ForegroundColor Yellow
+          if (Test-Path "C:\cloudflared.log") { 
+            Get-Content "C:\cloudflared.log" -Tail 20 
+          } else {
+            Write-Host "(log file not found)" -ForegroundColor Gray
+          }
+
       - name: Generate Job Summary
         shell: pwsh
         run: |
@@ -224,95 +232,48 @@ jobs:
           
           ## 🔌 How to Connect
           
-          ### Step 1: Download cloudflared
-          Download cloudflared for your operating system:
-          - **Windows**: [cloudflared-windows-amd64.exe](https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe)
-          - **macOS**: ``brew install cloudflared``
-          - **Linux**: [See releases](https://github.com/cloudflare/cloudflared/releases/latest)
-          
-          ### Step 2: Create local tunnel
-          Open a terminal/command prompt and run:
-          ``````
+          ``````bash
           cloudflared access tcp --hostname $env:TUNNEL_URL --url localhost:13389
           ``````
           
-          > 💡 You can use any available local port instead of 13389
-          
-          ### Step 3: Connect via RDP
-          1. Open **Remote Desktop Connection** (mstsc.exe on Windows)
-          2. Connect to: ``localhost:13389`` (or your chosen port)
-          3. Login with:
-             - Username: ``runneradmin``
-             - Password: ``(your PASSWORD secret)``
-          
-          ## ✅ Features
-          
-          - **Cloudflare Tunnel** - Enterprise-grade infrastructure
-          - **Better performance** than ngrok (lower latency)
-          - **No authentication required** - Uses temporary tunnel
-          - **Secure connection** through Cloudflare's network
-          
-          ## ⏳ Status
-          
-          The workflow will keep running until:
-          - You manually cancel it, or
-          - The 6-hour timeout is reached
-          
-          When you're done, click "Cancel workflow" to stop the job.
+          Then connect RDP to ``localhost:13389``
           "@
-          
           $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          
-          Write-Host "📝 Job summary generated successfully!" -ForegroundColor Green
-      
+          Write-Host "📝 Job summary generated" -ForegroundColor Green
+
       - name: Keep Session Alive
         shell: pwsh
         run: |
           Write-Host "⏳ Keeping session alive..." -ForegroundColor Cyan
-          Write-Host ""
-          Write-Host "The tunnel is now active and will remain open until:" -ForegroundColor Yellow
-          Write-Host "  - You cancel this workflow, or" -ForegroundColor Yellow
-          Write-Host "  - The 6-hour timeout is reached" -ForegroundColor Yellow
-          Write-Host ""
-          Write-Host "You can connect anytime using the instructions above." -ForegroundColor Green
+          Write-Host "Tunnel URL: $env:TUNNEL_URL" -ForegroundColor Cyan
           Write-Host ""
           
-          # Keep the workflow running and monitor cloudflared
           $elapsed = 0
-          $maxTime = 21600  # 6 hours in seconds
-          $interval = 60    # Check every minute
+          $maxTime = 21600  # 6 hours
+          $interval = 60
           
           while ($elapsed -lt $maxTime) {
-            # Check if cloudflared is still running
-            $cfProcess = Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue
-            if (-not $cfProcess) {
-              Write-Host "⚠️ Cloudflared process not found - attempting to restart..." -ForegroundColor Yellow
-              
-              # Try to restart cloudflared
-              Start-Process -FilePath ".\cloudflared.exe" -ArgumentList "tunnel --url tcp://localhost:3389" -WindowStyle Hidden
+            # Check cloudflared is still running
+            $cfProc = Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue
+            if (-not $cfProc) {
+              Write-Host "⚠️ Cloudflared not running, restarting..." -ForegroundColor Yellow
+              Start-Process -FilePath ".\cloudflared.exe" `
+                -ArgumentList "tunnel","--url","tcp://localhost:3389" `
+                -WindowStyle Hidden
               Start-Sleep -Seconds 5
-              
-              $cfProcess = Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue
-              if ($cfProcess) {
-                Write-Host "✅ Cloudflared restarted (PID: $($cfProcess.Id))" -ForegroundColor Green
-                Write-Host "⚠️ Note: Tunnel URL may have changed - check workflow logs" -ForegroundColor Yellow
-              } else {
-                Write-Host "❌ Failed to restart cloudflared" -ForegroundColor Red
-              }
             }
             
             $remaining = $maxTime - $elapsed
             $hours = [math]::Floor($remaining / 3600)
             $minutes = [math]::Floor(($remaining % 3600) / 60)
             
-            # Only print status every 5 minutes to reduce noise
             if ($elapsed % 300 -eq 0) {
-              Write-Host "⏰ Time remaining: $hours hours $minutes minutes (cloudflared PID: $(if($cfProcess){$cfProcess.Id}else{'N/A'}))" -ForegroundColor Green
+              $pid = if ($cfProc) { $cfProc.Id } else { "N/A" }
+              Write-Host "⏰ Time: $hours h $minutes m remaining | PID: $pid | URL: $env:TUNNEL_URL" -ForegroundColor Green
             }
             
             Start-Sleep -Seconds $interval
             $elapsed += $interval
           }
           
-          Write-Host ""
-          Write-Host "✅ Maximum session time reached!" -ForegroundColor Green
+          Write-Host "✅ Session ended." -ForegroundColor Green
