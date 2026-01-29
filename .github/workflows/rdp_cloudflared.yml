@@ -1,0 +1,284 @@
+name: RDP via Cloudflare Tunnel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp-cloudflared:
+    runs-on: windows-latest
+    timeout-minutes: 360  # 6 hours max
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Security Notice
+        shell: pwsh
+        run: |
+          Write-Host "⚠️  IMPORTANT LIMITATION" -ForegroundColor Red
+          Write-Host "" 
+          Write-Host "Cloudflare Quick Tunnels (trycloudflare.com) do NOT support raw TCP" -ForegroundColor Yellow
+          Write-Host "connections needed for RDP. The 'cloudflared access tcp' command only" -ForegroundColor Yellow
+          Write-Host "works with Cloudflare Access (Zero Trust) protected named tunnels." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "This workflow will create a tunnel, but you CANNOT connect with RDP." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "For working RDP access, use one of these instead:" -ForegroundColor Cyan
+          Write-Host "  - 'RDP via ngrok' workflow (requires free ngrok account)" -ForegroundColor Green
+          Write-Host "  - 'RDP via Chrome Remote Desktop' workflow (browser-based)" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "This workflow requires:" -ForegroundColor Yellow
+          Write-Host "  - PASSWORD: RDP password for the runneradmin user" -ForegroundColor Yellow
+          Write-Host ""
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download cloudflared
+        shell: pwsh
+        run: |
+          Write-Host "📥 Downloading cloudflared..." -ForegroundColor Cyan
+          Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile cloudflared.exe
+          Write-Host "✅ Download complete" -ForegroundColor Green
+      
+      - name: Enable Remote Desktop
+        shell: pwsh
+        run: |
+          Write-Host "🔧 Enabling Remote Desktop..." -ForegroundColor Cyan
+          
+          # Enable Remote Desktop
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          
+          # Enable RDP through Windows Firewall
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # Enable Network Level Authentication
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+          
+          Write-Host "✅ Remote Desktop enabled successfully" -ForegroundColor Green
+      
+      - name: Configure RDP User
+        shell: pwsh
+        env:
+          RDP_PASSWORD: ${{ secrets.PASSWORD }}
+        run: |
+          Write-Host "👤 Configuring RDP user..." -ForegroundColor Cyan
+
+          # Validate password is provided
+          if (-not $env:RDP_PASSWORD) {
+            Write-Host "❌ ERROR: PASSWORD secret is not configured!" -ForegroundColor Red
+            Write-Host "" -ForegroundColor Red
+            Write-Host "Please configure the PASSWORD secret in your repository:" -ForegroundColor Yellow
+            Write-Host "  1. Go to Settings > Secrets and variables > Actions" -ForegroundColor White
+            Write-Host "  2. Click 'New repository secret'" -ForegroundColor White
+            Write-Host "  3. Name: PASSWORD" -ForegroundColor White
+            Write-Host "  4. Value: Your desired RDP password (must meet complexity requirements)" -ForegroundColor White
+            Write-Host "" -ForegroundColor Yellow
+            exit 1
+          }
+
+          # Validate password length (Windows requires at least 6 characters typically)
+          if ($env:RDP_PASSWORD.Length -lt 6) {
+            Write-Host "❌ ERROR: PASSWORD is too short (minimum 6 characters required)" -ForegroundColor Red
+            exit 1
+          }
+
+          # Set password for the existing runneradmin user
+          try {
+            $securePassword = ConvertTo-SecureString -AsPlainText $env:RDP_PASSWORD -Force
+            Set-LocalUser -Name "runneradmin" -Password $securePassword -ErrorAction Stop
+            Write-Host "✅ User configured successfully" -ForegroundColor Green
+          } catch {
+            Write-Host "❌ ERROR: Failed to set password: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "" -ForegroundColor Yellow
+            Write-Host "Password may not meet Windows complexity requirements:" -ForegroundColor Yellow
+            Write-Host "  - At least 8 characters recommended" -ForegroundColor White
+            Write-Host "  - Mix of uppercase, lowercase, numbers, and symbols" -ForegroundColor White
+            Write-Host "  - Example: MyP@ssw0rd!" -ForegroundColor White
+            Write-Host "" -ForegroundColor Yellow
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "Username: runneradmin" -ForegroundColor White
+          Write-Host "Password: (configured from secrets)" -ForegroundColor White
+      
+      - name: Start Cloudflare Tunnel
+        shell: pwsh
+        run: |
+          Write-Host "🚇 Starting Cloudflare tunnel..." -ForegroundColor Cyan
+          
+          # Start cloudflared as a background process
+          # Using Start-Process which spawns an independent process that survives step boundaries
+          $proc = Start-Process -FilePath ".\cloudflared.exe" `
+            -ArgumentList "tunnel","--url","tcp://localhost:3389" `
+            -RedirectStandardError "C:\cloudflared.log" `
+            -PassThru `
+            -WindowStyle Hidden
+          
+          Write-Host "Cloudflared started with PID: $($proc.Id)" -ForegroundColor Gray
+          
+          # Wait for tunnel URL to appear in logs
+          Write-Host "Waiting for tunnel to initialize..." -ForegroundColor Yellow
+          $tunnelUrl = $null
+          $urlPattern = 'https://[a-zA-Z0-9\-]+\.trycloudflare\.com'
+          $maxWait = 60
+          $waited = 0
+          
+          while (-not $tunnelUrl -and $waited -lt $maxWait) {
+            Start-Sleep -Seconds 2
+            $waited += 2
+            
+            if (Test-Path "C:\cloudflared.log") {
+              $content = Get-Content "C:\cloudflared.log" -Raw -ErrorAction SilentlyContinue
+              if ($content) {
+                $match = [regex]::Match($content, $urlPattern)
+                if ($match.Success) {
+                  $tunnelUrl = $match.Value
+                }
+              }
+            }
+            Write-Host "." -NoNewline
+          }
+          Write-Host ""
+          
+          # Debug: Show process status
+          $cfProc = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+          if ($cfProc) {
+            Write-Host "✅ Cloudflared process is running (PID: $($cfProc.Id), Name: $($cfProc.ProcessName))" -ForegroundColor Green
+          } else {
+            Write-Host "❌ Cloudflared process NOT running!" -ForegroundColor Red
+            Write-Host "Log contents:" -ForegroundColor Yellow
+            if (Test-Path "C:\cloudflared.log") { Get-Content "C:\cloudflared.log" }
+            exit 1
+          }
+          
+          if (-not $tunnelUrl) {
+            Write-Host "❌ Failed to get tunnel URL after ${maxWait}s" -ForegroundColor Red
+            Write-Host "Log contents:" -ForegroundColor Yellow
+            if (Test-Path "C:\cloudflared.log") { Get-Content "C:\cloudflared.log" }
+            exit 1
+          }
+          
+          $cleanUrl = $tunnelUrl -replace "https://", ""
+          
+          Write-Host ""
+          Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+          Write-Host "    🎉 RDP CONNECTION READY!" -ForegroundColor Green
+          Write-Host "═══════════════════════════════════════════" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "🌐 Tunnel URL: $cleanUrl" -ForegroundColor Cyan
+          Write-Host "👤 Username: runneradmin" -ForegroundColor Cyan
+          Write-Host "🔑 Password: (your PASSWORD secret)" -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "📝 Run on your local machine:" -ForegroundColor Yellow
+          Write-Host "   cloudflared access tcp --hostname $cleanUrl --url localhost:13389" -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "Then connect RDP to: localhost:13389" -ForegroundColor White
+          Write-Host ""
+          
+          # Save for other steps
+          "TUNNEL_URL=$cleanUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$($proc.Id)" | Out-File -FilePath "C:\cloudflared.pid" -Encoding ascii
+
+      - name: Debug Process State
+        shell: pwsh
+        run: |
+          Write-Host "🔍 Checking cloudflared process state after step boundary..." -ForegroundColor Cyan
+          
+          # Method 1: Check by saved PID
+          if (Test-Path "C:\cloudflared.pid") {
+            $savedPid = Get-Content "C:\cloudflared.pid" -Raw
+            $savedPid = $savedPid.Trim()
+            Write-Host "Saved PID: $savedPid" -ForegroundColor Gray
+            $proc = Get-Process -Id $savedPid -ErrorAction SilentlyContinue
+            if ($proc) {
+              Write-Host "✅ Process by PID is ALIVE: $($proc.ProcessName) (PID: $($proc.Id))" -ForegroundColor Green
+            } else {
+              Write-Host "❌ Process by PID is DEAD" -ForegroundColor Red
+            }
+          }
+          
+          # Method 2: Check by name
+          $cfProcs = Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue
+          if ($cfProcs) {
+            Write-Host "✅ Found cloudflared process(es) by name:" -ForegroundColor Green
+            $cfProcs | ForEach-Object { Write-Host "   PID: $($_.Id), CPU: $($_.CPU)s" -ForegroundColor Gray }
+          } else {
+            Write-Host "❌ No cloudflared process found by name" -ForegroundColor Red
+          }
+          
+          # Method 3: Show all running processes (for debugging)
+          Write-Host ""
+          Write-Host "All processes containing 'cloud':" -ForegroundColor Yellow
+          Get-Process | Where-Object { $_.ProcessName -like "*cloud*" } | Format-Table Id, ProcessName, CPU -AutoSize
+          
+          # Show log tail
+          Write-Host ""
+          Write-Host "Cloudflared log tail:" -ForegroundColor Yellow
+          if (Test-Path "C:\cloudflared.log") { 
+            Get-Content "C:\cloudflared.log" -Tail 20 
+          } else {
+            Write-Host "(log file not found)" -ForegroundColor Gray
+          }
+
+      - name: Generate Job Summary
+        shell: pwsh
+        run: |
+          $summary = @"
+          # 🖥️ RDP Connection Ready via Cloudflare Tunnel
+          
+          ## Connection Information
+          
+          | Parameter | Value |
+          |-----------|-------|
+          | **Tunnel URL** | ``$env:TUNNEL_URL`` |
+          | **Username** | ``runneradmin`` |
+          | **Password** | ``(your PASSWORD secret)`` |
+          
+          ## 🔌 How to Connect
+          
+          ``````bash
+          cloudflared access tcp --hostname $env:TUNNEL_URL --url localhost:13389
+          ``````
+          
+          Then connect RDP to ``localhost:13389``
+          "@
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          Write-Host "📝 Job summary generated" -ForegroundColor Green
+
+      - name: Keep Session Alive
+        shell: pwsh
+        run: |
+          Write-Host "⏳ Keeping session alive..." -ForegroundColor Cyan
+          Write-Host "Tunnel URL: $env:TUNNEL_URL" -ForegroundColor Cyan
+          Write-Host ""
+          
+          $elapsed = 0
+          $maxTime = 21600  # 6 hours
+          $interval = 60
+          
+          while ($elapsed -lt $maxTime) {
+            # Check cloudflared is still running
+            $cfProc = Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue
+            if (-not $cfProc) {
+              Write-Host "⚠️ Cloudflared not running, restarting..." -ForegroundColor Yellow
+              Start-Process -FilePath ".\cloudflared.exe" `
+                -ArgumentList "tunnel","--url","tcp://localhost:3389" `
+                -WindowStyle Hidden
+              Start-Sleep -Seconds 5
+            }
+            
+            $remaining = $maxTime - $elapsed
+            $hours = [math]::Floor($remaining / 3600)
+            $minutes = [math]::Floor(($remaining % 3600) / 60)
+            
+            if ($elapsed % 300 -eq 0) {
+              $pid = if ($cfProc) { $cfProc.Id } else { "N/A" }
+              Write-Host "⏰ Time: $hours h $minutes m remaining | PID: $pid | URL: $env:TUNNEL_URL" -ForegroundColor Green
+            }
+            
+            Start-Sleep -Seconds $interval
+            $elapsed += $interval
+          }
+          
+          Write-Host "✅ Session ended." -ForegroundColor Green
